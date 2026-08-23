@@ -1,0 +1,79 @@
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+
+@namespace GIBS.Module.Entity
+@inherits ModuleBase
+@inject IEntityService ClientEntityService
+@inject NavigationManager NavigationManager
+@inject IStringLocalizer<Index> Localizer
+
+@if (_Entitys == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <ActionLink Action="Add" Security="SecurityAccessLevel.Edit" Text="Add Entity" ResourceKey="Add" />
+    <br />
+    <br />
+    @if (@_Entitys.Count != 0)
+    {
+        <Pager Items="@_Entitys">
+            <Header>
+                <th style="width: 1px;">&nbsp;</th>
+                <th style="width: 1px;">&nbsp;</th>
+                <th>@Localizer["Name"]</th>
+            </Header>
+            <Row>
+                <td><ActionLink Action="Edit" Parameters="@($"id=" + context.EntityId.ToString())" ResourceKey="Edit"  /></td>
+                <td><ActionDialog Header="Delete Entity" Message="Are You Sure You Wish To Delete This Entity?" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete"  Id="@context.EntityId.ToString()" /></td>
+                <td>@context.Name</td>
+            </Row>
+        </Pager>
+    }
+    else
+    {
+        <p>@Localizer["Message.DisplayNone"]</p>
+    }
+}
+
+@code {
+    public override string RenderMode => RenderModes.Static;
+
+    public override List<Resource> Resources => new List<Resource>()
+    {
+        new Stylesheet("_content/GIBS.Module.Entity/Module.css"),
+        new Script("_content/GIBS.Module.Entity/Module.js")
+    };
+
+    List<Entity> _Entitys;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _Entitys = await ClientEntityService.GetEntitysAsync(ModuleState.ModuleId);
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Entity {Error}", ex.Message);
+            AddModuleMessage(Localizer["Message.LoadError"], MessageType.Error);
+        }
+    }
+
+    private async Task Delete(Entity Entity)
+    {
+        try
+        {
+            await ClientEntityService.DeleteEntityAsync(Entity.EntityId, ModuleState.ModuleId);
+            await logger.LogInformation("Entity Deleted {Entity}", Entity);
+            _Entitys = await ClientEntityService.GetEntitysAsync(ModuleState.ModuleId);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Deleting Entity {Entity} {Error}", Entity, ex.Message);
+            AddModuleMessage(Localizer["Message.DeleteError"], MessageType.Error);
+        }
+    }
+}

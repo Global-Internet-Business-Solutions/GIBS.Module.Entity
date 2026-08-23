@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Client\GIBS.Module.Entity.Client.csproj" />
+  <Project Path="Server\GIBS.Module.Entity.Server.csproj" />
+  <Project Path="Shared\GIBS.Module.Entity.Shared.csproj" />
+  <Project Path="Package\GIBS.Module.Entity.Package.csproj" />
+</Solution>
