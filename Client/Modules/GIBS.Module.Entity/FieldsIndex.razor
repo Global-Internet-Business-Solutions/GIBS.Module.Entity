@@ -1,0 +1,122 @@
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+@using GIBS.Module.Entity.Enums
+@using GIBS.Module.Entity.Helpers
+
+@namespace GIBS.Module.Entity
+@inherits ModuleBase
+@inject IEntityFieldService EntityFieldService
+@inject IEntityFieldGroupService EntityFieldGroupService
+@inject IEntityTypeService EntityTypeService
+@inject NavigationManager NavigationManager
+@inject IStringLocalizer<FieldsIndex> Localizer
+
+@if (_fields == null)
+{
+    <p><em>@Localizer["Loading"]</em></p>
+}
+else
+{
+    <h4>@_entityTypeName - Custom Fields</h4>
+    <NavLink class="btn btn-secondary" href="@NavigateUrl("EntityTypesIndex")">@Localizer["Back"]</NavLink>
+    <ActionLink Action="FieldsEdit" Parameters="@($"entitytypeid={_entityTypeId}")" Security="SecurityAccessLevel.Edit" Text="Add Field" ResourceKey="Add" Class="btn btn-success" />
+    <ActionLink Action="FieldGroupsIndex" Parameters="@($"entitytypeid={_entityTypeId}")" Security="SecurityAccessLevel.Edit" Text="Manage Field Groups" ResourceKey="ManageFieldGroups" Class="btn btn-warning" />
+    <br /><br />
+
+    @if (_fields.Any())
+    {
+        <Pager Items="@_fields">
+            <Header>
+                <th style="width: 1px;">&nbsp;</th>
+                <th style="width: 1px;">&nbsp;</th>
+                <th>@Localizer["Name"]</th>
+                <th>@Localizer["Label"]</th>
+                <th>@Localizer["FieldGroup"]</th>
+                <th>@Localizer["DataType"]</th>
+                <th>@Localizer["EditorType"]</th>
+                <th style="width: 1px;">@Localizer["Required"]</th>
+                <th style="width: 1px;">@Localizer["Enabled"]</th>
+                <th style="width: 1px;">@Localizer["SortOrder"]</th>
+            </Header>
+            <Row>
+                <td><ActionLink Action="FieldsEdit" Parameters="@($"id={context.FieldId}&entitytypeid={_entityTypeId}")" ResourceKey="Edit" /></td>
+                <td><ActionDialog Header="Delete Field" Message="Are You Sure You Wish To Delete This Field?" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete" Id="@context.FieldId.ToString()" /></td>
+                <td>@context.Name</td>
+                <td>@context.Label</td>
+                <td>@GetFieldGroupName(context.FieldGroupId)</td>
+                <td>@context.DataType</td>
+                <td>@context.EditorType</td>
+                <td>@(context.IsRequired ? Localizer["Yes"] : Localizer["No"])</td>
+                <td>@(context.IsEnabled ? Localizer["Yes"] : Localizer["No"])</td>
+                <td>@context.SortOrder</td>
+            </Row>
+        </Pager>
+    }
+    else
+    {
+        <p>@Localizer["Message.DisplayNone"]</p>
+    }
+}
+
+@code {
+    public override string RenderMode => RenderModes.Static;
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.View;
+
+    private int _entityTypeId = 0;
+    private string _entityTypeName = string.Empty;
+    private List<EntityField> _fields;
+    private Dictionary<int, EntityFieldGroup> _fieldGroupsById = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Use helper to safely get entitytypeid with validation
+            if (!QueryStringHelper.TryGetInt(PageState.QueryString, "entitytypeid", out _entityTypeId) || _entityTypeId <= 0)
+            {
+                AddModuleMessage(Localizer["Error.MissingEntityType"], MessageType.Error);
+                return;
+            }
+
+            var entityType = await EntityTypeService.GetEntityTypeAsync(_entityTypeId, ModuleState.ModuleId);
+            _entityTypeName = entityType?.Name ?? "Unknown";
+            _fields = await EntityFieldService.GetFieldsAsync(_entityTypeId, ModuleState.ModuleId);
+
+            var fieldGroups = await EntityFieldGroupService.GetFieldGroupsAsync(_entityTypeId, ModuleState.ModuleId);
+            _fieldGroupsById = (fieldGroups ?? new List<EntityFieldGroup>()).ToDictionary(g => g.FieldGroupId, g => g);
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Fields {Error}", ex.Message);
+            AddModuleMessage(Localizer["Message.LoadError"], MessageType.Error);
+        }
+    }
+
+    private string GetFieldGroupName(int? fieldGroupId)
+    {
+        if (!fieldGroupId.HasValue)
+        {
+            return string.Empty;
+        }
+
+        return _fieldGroupsById.TryGetValue(fieldGroupId.Value, out var group)
+            ? group.Name
+            : string.Empty;
+    }
+
+    private async Task Delete(EntityField field)
+    {
+        try
+        {
+            await EntityFieldService.DeleteFieldAsync(field.FieldId, ModuleState.ModuleId);
+            await logger.LogInformation("Field Deleted {Field}", field);
+            _fields = await EntityFieldService.GetFieldsAsync(_entityTypeId, ModuleState.ModuleId);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Deleting Field {Field} {Error}", field, ex.Message);
+            AddModuleMessage(Localizer["Message.DeleteError"], MessageType.Error);
+        }
+    }
+}

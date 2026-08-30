@@ -1,0 +1,426 @@
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+
+@namespace GIBS.Module.Entity
+@inherits ModuleBase
+@inject IEntityTypeService EntityTypeService
+@inject IEntityFieldService EntityFieldService
+@inject IEntityFieldGroupService EntityFieldGroupService
+@inject IEntityFieldOptionService EntityFieldOptionService
+@inject IEntityService EntityService
+@inject NavigationManager NavigationManager
+@inject IStringLocalizer<BackOffice> Localizer
+
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col">
+            <h2>@Localizer["BackOffice_Title"]</h2>
+            <p class="text-muted">@Localizer["BackOffice_Description"]</p>
+           <div class="d-flex justify-content-between">
+               <NavLink class="btn btn-secondary" href="@NavigateUrl()">
+                   <i class="oi oi-arrow-left"></i> @Localizer["BackToEntities"]
+               </NavLink>
+               <ActionLink Action="Add" Security="SecurityAccessLevel.Edit" Text="Add Entity" Class="btn btn-success" ResourceKey="Add" />
+           </div>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="text-center my-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">@Localizer["Loading"]</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Dashboard Statistics -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card border-primary mb-3">
+                    <div class="card-body text-center">
+                        <i class="oi oi-list-rich" style="font-size: 2rem; color: var(--bs-primary);"></i>
+                        <h3 class="mt-2 mb-0">@_entityTypeCount</h3>
+                        <p class="text-muted mb-0">@Localizer["EntityTypes"]</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-success mb-3">
+                    <div class="card-body text-center">
+                        <i class="oi oi-document" style="font-size: 2rem; color: var(--bs-success);"></i>
+                        <h3 class="mt-2 mb-0">@_fieldCount</h3>
+                        <p class="text-muted mb-0">@Localizer["Fields"]</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-info mb-3">
+                    <div class="card-body text-center">
+                        <i class="oi oi-grid-three-up" style="font-size: 2rem; color: var(--bs-info);"></i>
+                        <h3 class="mt-2 mb-0">@_fieldGroupCount</h3>
+                        <p class="text-muted mb-0">@Localizer["FieldGroups"]</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-warning mb-3">
+                    <div class="card-body text-center">
+                        <i class="oi oi-layers" style="font-size: 2rem; color: var(--bs-warning);"></i>
+                        <h3 class="mt-2 mb-0">@_entityCount</h3>
+                        <p class="text-muted mb-0">@Localizer["Entities"]</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Management Navigation Cards -->
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-primary">
+                        <h5 class="mb-0 text-white"><i class="oi oi-list-rich"></i> @Localizer["EntityTypes_Title"]</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">@Localizer["EntityTypes_Description"]</p>
+                        <ul class="list-unstyled">
+                            @foreach (var entityType in _entityTypes.Take(3))
+                            {
+                                <li><i class="oi oi-check text-success"></i> @entityType.Name (@entityType.Key)</li>
+                            }
+                        </ul>
+                    </div>
+                    <div class="card-footer">
+                        <ActionLink Action="EntityTypesIndex" Class="btn btn-primary" Text="@Localizer["Manage"]" Security="SecurityAccessLevel.Edit" ResourceKey="ManageEntityTypes" />
+                        <ActionLink Action="EntityTypesEdit" Class="btn btn-outline-primary" Text="@Localizer["AddNew"]" Security="SecurityAccessLevel.Edit" ResourceKey="AddEntityType" />
+                        <ActionLink Action="TemplatesIndex" Class="btn btn-outline-secondary" Text="Templates" Security="SecurityAccessLevel.Edit" ResourceKey="ManageTemplates" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-warning">
+                        <h5 class="mb-0 text-white"><i class="oi oi-layers"></i> @Localizer["EntityRecords"]</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">@Localizer["EntityRecordDescription"]</p>
+                        @if (_entities.Any())
+                        {
+                            <ul class="list-unstyled">
+                                @foreach (var entity in _entities.Take(3))
+                                {
+                                    <li><i class="oi oi-check text-success"></i> @entity.Name</li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <div class="alert alert-light mb-0" role="alert">
+                                @Localizer["NoRecords"]
+                            </div>
+                        }
+                    </div>
+                    <div class="card-footer">
+                        <NavLink class="btn btn-warning" href="@NavigateUrl(ModuleState.ModuleId, "EntityList")">@Localizer["Manage"]</NavLink>
+                        <ActionLink Action="Add" Class="btn btn-outline-warning" Text="@Localizer["AddNew"]" Security="SecurityAccessLevel.Edit" ResourceKey="Add" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-6 offset-3">
+                <div class="card">
+                    <div class="card-body py-3">
+                        <label class="form-label mb-2 fw-bold">@Localizer["SelectEntityType"]</label>
+                        <select class="form-select" @bind="_selectedEntityTypeId">
+                            <option value="0">-- @Localizer["SelectOne"] --</option>
+                            @foreach (var entityType in _entityTypes)
+                            {
+                                <option value="@entityType.EntityTypeId">@entityType.Name</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Field Groups Management Card -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-info text-dark">
+                        <h5 class="mb-0"><i class="oi oi-layers"></i> @Localizer["FieldGroups"]</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">@Localizer["FieldGroupsDescription"]</p>
+                        @if (_selectedEntityTypeId > 0)
+                        {
+                            var selectedFieldGroups = _fieldGroupsByEntityType.ContainsKey(_selectedEntityTypeId)
+                                ? _fieldGroupsByEntityType[_selectedEntityTypeId].Take(3).ToList()
+                                : new List<EntityFieldGroup>();
+
+                            if (selectedFieldGroups.Any())
+                            {
+                                <ul class="list-unstyled">
+                                    @foreach (var group in selectedFieldGroups)
+                                    {
+                                        <li><i class="oi oi-check text-success"></i> @group.Name (@group.Key)</li>
+                                    }
+                                </ul>
+                            }
+                            else
+                            {
+                                <div class="alert alert-light mb-0" role="alert">
+                                    @Localizer["NoFieldGroups"]
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="alert alert-light mb-0" role="alert">
+                                @Localizer["SelectEntityType"]
+                            </div>
+                        }
+                    </div>
+                    <div class="card-footer">
+                        @if (_selectedEntityTypeId > 0)
+                        {
+                            <ActionLink Action="FieldGroupsIndex" Parameters="@($"entitytypeid={_selectedEntityTypeId}")" Class="btn btn-info" Text="@Localizer["Manage"]" Security="SecurityAccessLevel.Edit" ResourceKey="ManageFieldGroups" />
+                            <ActionLink Action="FieldGroupsEdit" Parameters="@($"entitytypeid={_selectedEntityTypeId}")" Class="btn btn-outline-info" Text="@Localizer["AddNew"]" Security="SecurityAccessLevel.Edit" ResourceKey="AddFieldGroup" />
+                        }
+                        else
+                        {
+                            <button class="btn btn-info" disabled>@Localizer["Manage"]</button>
+                            <button class="btn btn-outline-info" disabled>@Localizer["AddNew"]</button>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-success">
+                        <h5 class="mb-0 text-white"><i class="oi oi-document"></i> @Localizer["Fields_Title"]</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">@Localizer["Fields_Description"]</p>
+                        @if (_selectedEntityTypeId > 0)
+                        {
+                            var selectedFields = _fieldsByEntityType.ContainsKey(_selectedEntityTypeId)
+                                ? _fieldsByEntityType[_selectedEntityTypeId].Take(3).ToList()
+                                : new List<EntityField>();
+
+                            if (selectedFields.Any())
+                            {
+                                <ul class="list-unstyled">
+                                    @foreach (var field in selectedFields)
+                                    {
+                                        <li><i class="oi oi-check text-success"></i> @field.Name (@field.Key)</li>
+                                    }
+                                </ul>
+                            }
+                            else
+                            {
+                                <div class="text-muted">ADD GRID WITH CUSTOM FIELDS</div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="alert alert-light mb-0" role="alert">
+                                @Localizer["SelectEntityType"]
+                            </div>
+                        }
+                    </div>
+                    <div class="card-footer">
+                        @if (_selectedEntityTypeId > 0)
+                        {
+                            <ActionLink Action="FieldsIndex" Parameters="@($"entitytypeid={_selectedEntityTypeId}")" Class="btn btn-success" Text="@Localizer["Manage"]" Security="SecurityAccessLevel.Edit" ResourceKey="ManageFields" />
+                            <ActionLink Action="FieldsEdit" Parameters="@($"entitytypeid={_selectedEntityTypeId}")" Class="btn btn-outline-success" Text="@Localizer["AddNew"]" Security="SecurityAccessLevel.Edit" ResourceKey="AddField" />
+                        }
+                        else
+                        {
+                            <button class="btn btn-success" disabled>@Localizer["Manage"]</button>
+                            <button class="btn btn-outline-success" disabled>@Localizer["AddNew"]</button>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Entity Types -->
+        @if (_entityTypes.Any())
+        {
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="oi oi-list"></i> @Localizer["RecentEntityTypes"]</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>@Localizer["Name"]</th>
+                                            <th>@Localizer["Key"]</th>
+                                            <th>@Localizer["Fields"]</th>
+                                            <th>@Localizer["Status"]</th>
+                                            <th>@Localizer["Modified"]</th>
+                                            <th>@Localizer["Actions"]</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var entityType in _entityTypes.Take(5))
+                                        {
+                                            var fieldCount = _fieldCounts.ContainsKey(entityType.EntityTypeId) ? _fieldCounts[entityType.EntityTypeId] : 0;
+                                            <tr>
+                                                <td>
+                                                    <strong>@entityType.Name</strong>
+                                                    @if (entityType.IsSystem)
+                                                    {
+                                                        <span class="badge bg-secondary ms-1">@Localizer["System"]</span>
+                                                    }
+                                                </td>
+                                                <td><code>@entityType.Key</code></td>
+                                                <td>
+                                                    <span class="badge bg-info">@fieldCount @Localizer["FieldsCount"]</span>
+                                                </td>
+                                                <td>
+                                                    @if (entityType.IsEnabled)
+                                                    {
+                                                        <span class="badge bg-success">@Localizer["Enabled"]</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary">@Localizer["Disabled"]</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    <small class="text-muted">@entityType.ModifiedOn.ToString("g")</small>
+                                                </td>
+                                                <td>
+                                                    <ActionLink Action="EntityTypesEdit" Parameters="@($"id={entityType.EntityTypeId}")" Class="btn btn-sm btn-outline-primary" Text="@Localizer["Edit"]" Security="SecurityAccessLevel.Edit" ResourceKey="Edit" />
+                                                    <ActionLink Action="FieldsIndex" Parameters="@($"entitytypeid={entityType.EntityTypeId}")" Class="btn btn-sm btn-outline-success" Text="@Localizer["Fields"]" Security="SecurityAccessLevel.Edit" ResourceKey="Fields" />
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                            @if (_entityTypes.Count > 5)
+                            {
+                                <div class="text-center mt-3">
+                                    <ActionLink Action="EntityTypesIndex" Class="btn btn-outline-primary" Text="@Localizer["ViewAll"]" Security="SecurityAccessLevel.Edit" ResourceKey="ViewAllEntityTypes" />
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- Getting Started Guide -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="card border-primary">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="oi oi-lightbulb"></i> @Localizer["GettingStarted.Title"]</h5>
+                        </div>
+                        <div class="card-body">
+                            <h6>@Localizer["GettingStarted.Welcome"]</h6>
+                            <ol class="mt-3">
+                                <li class="mb-2">
+                                    <strong>@Localizer["GettingStarted.Step1.Title"]</strong>
+                                    <p class="text-muted mb-0">@Localizer["GettingStarted.Step1.Description"]</p>
+                                </li>
+                                <li class="mb-2">
+                                    <strong>@Localizer["GettingStarted.Step2.Title"]</strong>
+                                    <p class="text-muted mb-0">@Localizer["GettingStarted.Step2.Description"]</p>
+                                </li>
+                                <li class="mb-2">
+                                    <strong>@Localizer["GettingStarted.Step3.Title"]</strong>
+                                    <p class="text-muted mb-0">@Localizer["GettingStarted.Step3.Description"]</p>
+                                </li>
+                                <li class="mb-2">
+                                    <strong>@Localizer["GettingStarted.Step4.Title"]</strong>
+                                    <p class="text-muted mb-0">@Localizer["GettingStarted.Step4.Description"]</p>
+                                </li>
+                            </ol>
+                            <div class="alert alert-info mt-3" role="alert">
+                                <i class="oi oi-info"></i> @Localizer["GettingStarted.Tip"]
+                            </div>
+                            <ActionLink Action="EntityTypesEdit" Class="btn btn-primary btn-lg" Text="@Localizer["CreateFirstEntityType"]" Security="SecurityAccessLevel.Edit" ResourceKey="CreateFirstEntityType" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    public override string RenderMode => RenderModes.Interactive;
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
+    public override bool UseAdminContainer => false;
+    private bool _isLoading = true;
+    private int _entityTypeCount = 0;
+    private int _fieldCount = 0;
+    private int _fieldGroupCount = 0;
+    private int _entityCount = 0;
+    private List<EntityType> _entityTypes = new();
+    private List<Entity> _entities = new();
+    private Dictionary<int, int> _fieldCounts = new();
+    private Dictionary<int, List<EntityFieldGroup>> _fieldGroupsByEntityType = new();
+    private Dictionary<int, List<EntityField>> _fieldsByEntityType = new();
+    private int _selectedEntityTypeId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _isLoading = true;
+
+            // Load statistics
+            _entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+            _entityTypeCount = _entityTypes.Count;
+            _selectedEntityTypeId = _entityTypes.FirstOrDefault()?.EntityTypeId ?? 0;
+
+            // Load field groups count and cache by entity type
+            var allFieldGroups = new List<EntityFieldGroup>();
+            foreach (var entityType in _entityTypes)
+            {
+                var groups = await EntityFieldGroupService.GetFieldGroupsAsync(entityType.EntityTypeId, ModuleState.ModuleId);
+                _fieldGroupsByEntityType[entityType.EntityTypeId] = groups ?? new List<EntityFieldGroup>();
+                allFieldGroups.AddRange(_fieldGroupsByEntityType[entityType.EntityTypeId]);
+            }
+            _fieldGroupCount = allFieldGroups.Count;
+
+            // Load fields count per entity type
+            foreach (var entityType in _entityTypes)
+            {
+                var fields = await EntityFieldService.GetFieldsAsync(entityType.EntityTypeId, ModuleState.ModuleId);
+                _fieldsByEntityType[entityType.EntityTypeId] = fields ?? new List<EntityField>();
+                _fieldCounts[entityType.EntityTypeId] = _fieldsByEntityType[entityType.EntityTypeId].Count;
+                _fieldCount += _fieldsByEntityType[entityType.EntityTypeId].Count;
+            }
+
+            // Load entities count
+            _entities = await EntityService.GetEntitysAsync(ModuleState.ModuleId);
+            _entityCount = _entities.Count;
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading BackOffice Data {Error}", ex.Message);
+            AddModuleMessage(Localizer["Error.LoadData"], MessageType.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

@@ -1,0 +1,186 @@
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+@using GIBS.Module.Entity.Helpers
+
+@namespace GIBS.Module.Entity
+@inherits ModuleBase
+@inject NavigationManager NavigationManager
+@inject IEntityFieldOptionService EntityFieldOptionService
+@inject IEntityFieldService EntityFieldService
+@inject IStringLocalizer<FieldOptionsEdit> Localizer
+
+<form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
+    <div class="container">
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="displaytext" HelpText="Text shown to users" ResourceKey="DisplayText">Display Text:</Label>
+            <div class="col-sm-9">
+                <input id="displaytext" class="form-control" @bind="@_displayText" maxlength="200" required />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="value" HelpText="Value stored in database" ResourceKey="Value">Value:</Label>
+            <div class="col-sm-9">
+                <input id="value" class="form-control" @bind="@_value" maxlength="100" required />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="key" HelpText="Unique stable key" ResourceKey="Key">Key:</Label>
+            <div class="col-sm-9">
+                <input id="key" class="form-control" @bind="@_key" maxlength="100" required />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="sortorder" HelpText="Display order" ResourceKey="SortOrder">Sort Order:</Label>
+            <div class="col-sm-9">
+                <input id="sortorder" type="number" class="form-control" @bind="@_sortOrder" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="isdefault" HelpText="Is this the default selection?" ResourceKey="Default">Default?</Label>
+            <div class="col-sm-9">
+                <select id="isdefault" class="form-select" @bind="@_isDefault">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="isenabled" HelpText="Is this option enabled?" ResourceKey="Enabled">Enabled?</Label>
+            <div class="col-sm-9">
+                <select id="isenabled" class="form-select" @bind="@_isEnabled">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <br /><br />
+        <button type="button" class="btn btn-success" @onclick="SaveFieldOption">@Localizer["Save"]</button>
+        <NavLink class="btn btn-secondary" href="@NavigateUrl("FieldOptionsIndex", $"fieldid={_fieldId}")">@Localizer["Cancel"]</NavLink>
+        <br /><br />
+        <AuditInfo CreatedBy="@_createdBy" CreatedOn="@_createdOn" ModifiedBy="@_modifiedBy" ModifiedOn="@_modifiedOn"></AuditInfo>
+    </div>
+</form>
+
+@code {
+    private ElementReference form;
+    private bool validated = false;
+
+    private int _fieldOptionId = -1;
+    private int _fieldId;
+    private string _displayText = string.Empty;
+    private string _value = string.Empty;
+    private string _key = string.Empty;
+    private int _sortOrder = 0;
+    private string _isDefault = "False";
+    private string _isEnabled = "True";
+    private string _createdBy;
+    private DateTime _createdOn;
+    private string _modifiedBy;
+    private DateTime _modifiedOn;
+
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Use helper to safely get fieldid with validation
+            if (!QueryStringHelper.TryGetInt(PageState.QueryString, "fieldid", out _fieldId) || _fieldId <= 0)
+            {
+                AddModuleMessage(Localizer["Error.MissingField"], MessageType.Error);
+                return;
+            }
+
+            // Use helper to safely get the field option id if editing
+            if (QueryStringHelper.TryGetInt(PageState.QueryString, "id", out _fieldOptionId))
+            {
+                var option = await EntityFieldOptionService.GetFieldOptionAsync(_fieldOptionId, ModuleState.ModuleId);
+                if (option != null)
+                {
+                    _displayText = option.DisplayText;
+                    _value = option.Value;
+                    _key = option.Key;
+                    _sortOrder = option.SortOrder;
+                    _isDefault = option.IsDefault.ToString();
+                    _isEnabled = option.IsEnabled.ToString();
+                    _createdBy = option.CreatedBy;
+                    _createdOn = option.CreatedOn;
+                    _modifiedBy = option.ModifiedBy;
+                    _modifiedOn = option.ModifiedOn;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Field Option {FieldOptionId} {Error}", _fieldOptionId, ex.Message);
+            AddModuleMessage(Localizer["Error.LoadFieldOption"], MessageType.Error);
+        }
+    }
+
+    private async Task SaveFieldOption()
+    {
+        validated = true;
+        var interop = new Oqtane.UI.Interop(JSRuntime);
+        if (await interop.FormValid(form))
+        {
+            try
+            {
+                // Validate fieldId before proceeding
+                if (_fieldId <= 0)
+                {
+                    AddModuleMessage(Localizer["Error.MissingField"], MessageType.Error);
+                    return;
+                }
+
+                EntityFieldOption option;
+                if (_fieldOptionId != -1)
+                {
+                    option = await EntityFieldOptionService.GetFieldOptionAsync(_fieldOptionId, ModuleState.ModuleId);
+
+                    // Check if option was found
+                    if (option == null)
+                    {
+                        AddModuleMessage(Localizer["Error.FieldOptionNotFound"], MessageType.Error);
+                        return;
+                    }
+                }
+                else
+                {
+                    option = new EntityFieldOption
+                    {
+                        FieldId = _fieldId
+                    };
+                }
+
+                option.DisplayText = _displayText;
+                option.Value = _value;
+                option.Key = _key;
+                option.SortOrder = _sortOrder;
+                option.IsDefault = bool.Parse(_isDefault);
+                option.IsEnabled = bool.Parse(_isEnabled);
+
+                if (_fieldOptionId != -1)
+                {
+                    await EntityFieldOptionService.UpdateFieldOptionAsync(option);
+                    await logger.LogInformation("Field Option Updated {Option}", option);
+                }
+                else
+                {
+                    option = await EntityFieldOptionService.AddFieldOptionAsync(option);
+                    await logger.LogInformation("Field Option Added {Option}", option);
+                }
+
+                NavigationManager.NavigateTo(NavigateUrl("FieldOptionsIndex", $"fieldid={_fieldId}"));
+            }
+            catch (Exception ex)
+            {
+                await logger.LogError(ex, "Error Saving Field Option {Error}", ex.Message);
+                AddModuleMessage(Localizer["Error.SaveFieldOption"], MessageType.Error);
+            }
+        }
+        else
+        {
+            AddModuleMessage(Localizer["Message.SaveValidation"], MessageType.Warning);
+        }
+    }
+}

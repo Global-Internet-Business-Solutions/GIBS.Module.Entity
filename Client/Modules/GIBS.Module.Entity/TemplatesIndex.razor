@@ -1,0 +1,79 @@
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+
+@namespace GIBS.Module.Entity
+@inherits ModuleBase
+@inject IEntityTemplateService EntityTemplateService
+@inject IStringLocalizer<TemplatesIndex> Localizer
+
+@if (_templates == null)
+{
+    <p><em>@Localizer["Loading"]</em></p>
+}
+else
+{
+    <NavLink class="btn btn-secondary" href="@NavigateUrl(@ModuleState.ModuleId, "BackOffice")">@Localizer["Back"]</NavLink>
+    <ActionLink Action="TemplatesEdit" Security="SecurityAccessLevel.Edit" Text="Add Template" ResourceKey="Add" Class="btn btn-success" />
+    <br /><br />
+
+    @if (_templates.Any())
+    {
+        <Pager Items="@_templates">
+            <Header>
+                <th style="width: 1px;">&nbsp;</th>
+                <th style="width: 1px;">&nbsp;</th>
+                <th>Template Type</th>
+                <th>Page Title</th>
+                <th>Page Header</th>
+            </Header>
+            <Row>
+                <td><ActionLink Action="TemplatesEdit" Parameters="@($"id={context.TemplateId}")" Security="SecurityAccessLevel.Edit" ResourceKey="Edit" /></td>
+                <td><ActionDialog Header="Delete Template" Message="Are You Sure You Wish To Delete This Template?" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete" /></td>
+                <td>@context.TemplateType</td>
+                <td>@context.PageTitle</td>
+                <td>@context.PageHeader</td>
+            </Row>
+        </Pager>
+    }
+    else
+    {
+        <p>@Localizer["Message.DisplayNone"]</p>
+    }
+}
+
+@code {
+    public override string RenderMode => RenderModes.Static;
+    public override bool UseAdminContainer => false;
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
+
+    private List<EntityTemplate> _templates;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _templates = await EntityTemplateService.GetTemplatesAsync(ModuleState.ModuleId);
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Templates {Error}", ex.Message);
+            AddModuleMessage(Localizer["Message.LoadError"], MessageType.Error);
+        }
+    }
+
+    private async Task Delete(EntityTemplate template)
+    {
+        try
+        {
+            await EntityTemplateService.DeleteTemplateAsync(template.TemplateId, ModuleState.ModuleId);
+            await logger.LogInformation("Template Deleted {Template}", template);
+            _templates = await EntityTemplateService.GetTemplatesAsync(ModuleState.ModuleId);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Deleting Template {TemplateId} {Error}", template.TemplateId, ex.Message);
+            AddModuleMessage(Localizer["Message.DeleteError"], MessageType.Error);
+        }
+    }
+}

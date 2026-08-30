@@ -1,0 +1,522 @@
+@using System.Text.Json
+@using Oqtane.Modules.Controls
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+@using GIBS.Module.Entity.Enums
+
+@namespace GIBS.Module.Entity
+@inherits ModuleBase
+@inject IEntityService ClientEntityService
+@inject IEntityTypeService EntityTypeService
+@inject IEntityFieldService EntityFieldService
+@inject IEntityFieldOptionService EntityFieldOptionService
+@inject NavigationManager NavigationManager
+@inject IStringLocalizer<EntityEdit> Localizer
+
+<form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
+    <div class="container">
+        <!-- Entity Type Selection -->
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="entitytypeid" HelpText="Select the entity type" ResourceKey="EntityType">Entity Type: </Label>
+            <div class="col-sm-9">
+                <select id="entitytypeid" class="form-select" @bind="@_entityTypeId" @bind:after="OnEntityTypeChanged" required>
+                    <option value="0">-- @Localizer["SelectOne"] --</option>
+                    @foreach (var entityType in _entityTypes)
+                    {
+                        <option value="@entityType.EntityTypeId">@entityType.Name</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <!-- Name -->
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="name" HelpText="Enter a name" ResourceKey="Name">Name: </Label>
+            <div class="col-sm-9">
+                <input id="name" class="form-control" @bind="@_name" maxlength="256" required />
+            </div>
+        </div>
+
+        <!-- Key -->
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="key" HelpText="Unique stable key for this entity" ResourceKey="Key">Key: </Label>
+            <div class="col-sm-9">
+                <input id="key" class="form-control" @bind="@_key" maxlength="100" />
+            </div>
+        </div>
+
+        <!-- Description -->
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="description" HelpText="Description of the entity" ResourceKey="Description">Description: </Label>
+            <div class="col-sm-9">
+                <textarea id="description" class="form-control" @bind="@_description" rows="3" maxlength="500"></textarea>
+            </div>
+        </div>
+
+        <!-- Parent Entity -->
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="parententityid" HelpText="Optional parent entity for hierarchy" ResourceKey="ParentEntity">Parent Entity: </Label>
+            <div class="col-sm-9">
+                <select id="parententityid" class="form-select" @bind="@_parentEntityId">
+                    <option value="">@Localizer["None"]</option>
+                    @foreach (var entity in _availableParentEntities)
+                    {
+                        <option value="@entity.EntityId">@entity.Name</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <!-- Custom Fields -->
+        @if (_customFields.Any())
+        {
+            <hr />
+            <h5>@Localizer["CustomFields"]</h5>
+            @foreach (var customField in _customFields)
+            {
+                <div class="row mb-1 align-items-center">
+                    <Label Class="col-sm-3" For="@($"cf_{customField.FieldId}")" HelpText="@customField.HelpText" ResourceKey="@customField.Key">@(string.IsNullOrWhiteSpace(customField.Label) ? customField.Name : customField.Label): </Label>
+                    <div class="col-sm-9">
+                        @if (customField.EditorType == EntityEditorType.HtmlEditor)
+                        {
+                            @((MarkupString)(customField.HtmlContent ?? string.Empty))
+                        }
+                        else if (customField.EditorType == EntityEditorType.TextArea || customField.EditorType == EntityEditorType.RichText)
+                        {
+                            <textarea id="@($"cf_{customField.FieldId}")" class="form-control" value="@GetCustomFieldValue(customField.FieldId, customField.DefaultValue)" @onchange="@(e => SetCustomFieldValue(customField.FieldId, e.Value?.ToString()))"></textarea>
+                        }
+                        else if (customField.EditorType == EntityEditorType.Dropdown)
+                        {
+                            var options = GetFieldOptions(customField.FieldId);
+                            <select id="@($"cf_{customField.FieldId}")" class="form-select" value="@GetCustomFieldValue(customField.FieldId, customField.DefaultValue)" @onchange="@(e => SetCustomFieldValue(customField.FieldId, e.Value?.ToString()))">
+                                <option value="">@Localizer["SelectOne"]</option>
+                                @foreach (var option in options)
+                                {
+                                    <option value="@option.Value">@option.DisplayText</option>
+                                }
+                            </select>
+                        }
+                        else if (customField.EditorType == EntityEditorType.Checkbox || customField.EditorType == EntityEditorType.Toggle)
+                        {
+                            <div class="form-check mt-2">
+                                <input id="@($"cf_{customField.FieldId}")" type="checkbox" class="form-check-input" checked="@GetCustomFieldBoolValue(customField.FieldId, customField.DefaultValue)" @onchange="@(e => SetCustomFieldValue(customField.FieldId, e.Value?.ToString()))" />
+                            </div>
+                        }
+                        else if (customField.EditorType == EntityEditorType.DatePicker)
+                        {
+                            <input id="@($"cf_{customField.FieldId}")" type="date" class="form-control" value="@GetCustomFieldValue(customField.FieldId, customField.DefaultValue)" @onchange="@(e => SetCustomFieldValue(customField.FieldId, e.Value?.ToString()))" />
+                        }
+                        else if (customField.EditorType == EntityEditorType.DateTimePicker)
+                        {
+                            <input id="@($"cf_{customField.FieldId}")" type="datetime-local" class="form-control" value="@GetCustomFieldValue(customField.FieldId, customField.DefaultValue)" @onchange="@(e => SetCustomFieldValue(customField.FieldId, e.Value?.ToString()))" />
+                        }
+                        else if (customField.EditorType == EntityEditorType.Number || customField.EditorType == EntityEditorType.Currency)
+                        {
+                            <input id="@($"cf_{customField.FieldId}")" type="number" class="form-control" value="@GetCustomFieldValue(customField.FieldId, customField.DefaultValue)" @onchange="@(e => SetCustomFieldValue(customField.FieldId, e.Value?.ToString()))" />
+                        }
+                        else
+                        {
+                            <input id="@($"cf_{customField.FieldId}")" class="form-control" value="@GetCustomFieldValue(customField.FieldId, customField.DefaultValue)" maxlength="@(customField.MaxLength ?? 2000)" @onchange="@(e => SetCustomFieldValue(customField.FieldId, e.Value?.ToString()))" />
+                        }
+                    </div>
+                </div>
+            }
+            <hr />
+        }
+
+        <!-- Status -->
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="status" HelpText="Current status of the entity" ResourceKey="Status">Status: </Label>
+            <div class="col-sm-9">
+                <select id="status" class="form-select" @bind="@_status">
+                    @foreach (var status in StatusOptions)
+                    {
+                        <option value="@status">@status</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <!-- Sort Order -->
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="sortorder" HelpText="Display order" ResourceKey="SortOrder">Sort Order: </Label>
+            <div class="col-sm-9">
+                <input id="sortorder" type="number" class="form-control" @bind="@_sortOrder" />
+            </div>
+        </div>
+
+        <!-- Is Enabled -->
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="isenabled" HelpText="Is this entity enabled?" ResourceKey="Enabled">Enabled? </Label>
+            <div class="col-sm-9">
+                <select id="isenabled" class="form-select" @bind="@_isEnabled">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Is Featured -->
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="isfeatured" HelpText="Is this entity featured?" ResourceKey="Featured">Featured? </Label>
+            <div class="col-sm-9">
+                <select id="isfeatured" class="form-select" @bind="@_isFeatured">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Is Published -->
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="ispublished" HelpText="Is this entity published?" ResourceKey="Published">Published? </Label>
+            <div class="col-sm-9">
+                <select id="ispublished" class="form-select" @bind="@_isPublished">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Publish Start Date -->
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="publishstartdate" HelpText="When to start publishing" ResourceKey="PublishStartDate">Publish Start Date: </Label>
+            <div class="col-sm-9">
+                <input id="publishstartdate" type="datetime-local" class="form-control" @bind="@_publishStartDate" />
+            </div>
+        </div>
+
+        <!-- Publish End Date -->
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="publishenddate" HelpText="When to stop publishing" ResourceKey="PublishEndDate">Publish End Date: </Label>
+            <div class="col-sm-9">
+                <input id="publishenddate" type="datetime-local" class="form-control" @bind="@_publishEndDate" />
+            </div>
+        </div>
+
+        <!-- Settings (JSON) -->
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="settings" HelpText="Additional settings in JSON format" ResourceKey="Settings">Settings: </Label>
+            <div class="col-sm-9">
+                <textarea id="settings" class="form-control" @bind="@_settings" rows="4"></textarea>
+            </div>
+        </div>
+    </div>
+    <button type="button" class="btn btn-success" @onclick="Save">@Localizer["Save"]</button>
+    <NavLink class="btn btn-secondary" href="@NavigateUrl()">@Localizer["Cancel"]</NavLink>
+    <br /><br />
+    @if (PageState.Action == "Edit")
+    {
+        <AuditInfo CreatedBy="@_createdby" CreatedOn="@_createdon" ModifiedBy="@_modifiedby" ModifiedOn="@_modifiedon"></AuditInfo>
+    }
+</form>
+
+@code {
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
+    public override string RenderMode => RenderModes.Interactive;
+
+    public override string Actions => "Add,Edit";
+
+    public override string Title => "Manage Entity";
+
+    public override List<Resource> Resources => new List<Resource>()
+    {
+        new Stylesheet("_content/GIBS.Module.Entity/Module.css")
+    };
+
+    private ElementReference form;
+    private bool validated = false;
+
+    private int _id;
+    private int _entityTypeId;
+    private string _name = string.Empty;
+    private string _key = string.Empty;
+    private string _description = string.Empty;
+    private string _parentEntityId = string.Empty;
+    private string _status = StatusDraft;
+    private int _sortOrder = 0;
+    private string _isEnabled = "True";
+    private string _isFeatured = "False";
+    private string _isPublished = "False";
+    private DateTime? _publishStartDate;
+    private DateTime? _publishEndDate;
+    private string _settings = string.Empty;
+    private string _createdby;
+    private DateTime _createdon;
+    private string _modifiedby;
+    private DateTime _modifiedon;
+
+    private const string StatusDraft = "Draft";
+    private const string StatusPendingReview = "Pending Review";
+    private const string StatusApproved = "Approved";
+    private const string StatusPublished = "Published";
+    private const string StatusArchived = "Archived";
+
+    private static readonly IReadOnlyList<string> StatusOptions = new[]
+    {
+        StatusDraft,
+        StatusPendingReview,
+        StatusApproved,
+        StatusPublished,
+        StatusArchived
+    };
+
+    private List<EntityType> _entityTypes = new();
+    private List<Entity> _availableParentEntities = new();
+    private List<EntityField> _customFields = new();
+    private Dictionary<int, List<EntityFieldOption>> _customFieldOptions = new();
+    private Dictionary<int, string> _customFieldValues = new();
+    private Dictionary<int, EntityType> _entityTypeLookup = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Load entity types for dropdown
+            _entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+            _entityTypeLookup = _entityTypes.ToDictionary(x => x.EntityTypeId, x => x);
+
+            if (PageState.Action == "Edit")
+            {
+                _id = Int32.Parse(PageState.QueryString["id"]);
+                Entity Entity = await ClientEntityService.GetEntityAsync(_id, ModuleState.ModuleId);
+                if (Entity != null)
+                {
+                    _entityTypeId = Entity.EntityTypeId;
+                    _name = Entity.Name;
+                    _key = Entity.Key ?? string.Empty;
+                    _description = Entity.Description ?? string.Empty;
+                    _parentEntityId = Entity.ParentEntityId?.ToString() ?? string.Empty;
+                    _status = string.IsNullOrWhiteSpace(Entity.Status) ? StatusDraft : (StatusOptions.Contains(Entity.Status) ? Entity.Status : StatusDraft);
+                    _sortOrder = Entity.SortOrder;
+                    _isEnabled = Entity.IsEnabled.ToString();
+                    _isFeatured = Entity.IsFeatured.ToString();
+                    _isPublished = Entity.IsPublished.ToString();
+                    _publishStartDate = Entity.PublishStartDate;
+                    _publishEndDate = Entity.PublishEndDate;
+                    _settings = Entity.Settings ?? string.Empty;
+                    _createdby = Entity.CreatedBy;
+                    _createdon = Entity.CreatedOn;
+                    _modifiedby = Entity.ModifiedBy;
+                    _modifiedon = Entity.ModifiedOn;
+
+                    if (!string.IsNullOrWhiteSpace(Entity.Settings))
+                    {
+                        TryLoadCustomFieldValues(Entity.Settings);
+                    }
+
+                    // Load potential parent entities (exclude self)
+                    var allEntities = await ClientEntityService.GetEntitysAsync(ModuleState.ModuleId);
+                    _availableParentEntities = allEntities.Where(e => e.EntityId != _id && e.EntityTypeId == _entityTypeId).ToList();
+                }
+            }
+            else
+            {
+                // Load all entities for parent selection in Add mode
+                var allEntities = await ClientEntityService.GetEntitysAsync(ModuleState.ModuleId);
+                _availableParentEntities = allEntities.ToList();
+            }
+
+            await LoadCustomFieldsAsync();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Entity {EntityId} {Error}", _id, ex.Message);
+            AddModuleMessage(Localizer["Message.LoadError"], MessageType.Error);
+        }
+    }
+
+    private async Task OnEntityTypeChanged()
+    {
+        await LoadCustomFieldsAsync();
+
+        var allEntities = await ClientEntityService.GetEntitysAsync(ModuleState.ModuleId);
+        if (PageState.Action == "Edit")
+        {
+            _availableParentEntities = allEntities.Where(e => e.EntityId != _id && e.EntityTypeId == _entityTypeId).ToList();
+        }
+        else
+        {
+            _availableParentEntities = allEntities.Where(e => e.EntityTypeId == _entityTypeId).ToList();
+        }
+    }
+
+    private async Task LoadCustomFieldsAsync()
+    {
+        _customFields = new List<EntityField>();
+        _customFieldOptions = new Dictionary<int, List<EntityFieldOption>>();
+
+        if (_entityTypeId <= 0)
+        {
+            return;
+        }
+
+        var effectiveTypeIds = GetEffectiveEntityTypeIds(_entityTypeId);
+        var fieldsByKey = new Dictionary<string, EntityField>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var typeId in effectiveTypeIds)
+        {
+            var fields = await EntityFieldService.GetFieldsAsync(typeId, ModuleState.ModuleId);
+            foreach (var field in fields.Where(f => f.IsEnabled))
+            {
+                if (!fieldsByKey.ContainsKey(field.Key))
+                {
+                    fieldsByKey[field.Key] = field;
+                }
+            }
+        }
+
+        _customFields = fieldsByKey.Values.OrderBy(f => f.SortOrder).ThenBy(f => f.Name).ToList();
+
+        foreach (var field in _customFields)
+        {
+            if (field.EditorType == EntityEditorType.Dropdown ||
+                field.EditorType == EntityEditorType.RadioList ||
+                field.EditorType == EntityEditorType.CheckboxList ||
+                field.EditorType == EntityEditorType.MultiSelect)
+            {
+                var options = await EntityFieldOptionService.GetFieldOptionsAsync(field.FieldId, ModuleState.ModuleId);
+                _customFieldOptions[field.FieldId] = options.Where(o => o.IsEnabled).OrderBy(o => o.SortOrder).ThenBy(o => o.DisplayText).ToList();
+            }
+
+            if (!_customFieldValues.ContainsKey(field.FieldId) && !string.IsNullOrWhiteSpace(field.DefaultValue))
+            {
+                _customFieldValues[field.FieldId] = field.DefaultValue;
+            }
+        }
+    }
+
+    private List<int> GetEffectiveEntityTypeIds(int entityTypeId)
+    {
+        var result = new List<int>();
+        var currentId = entityTypeId;
+        var seen = new HashSet<int>();
+
+        while (currentId > 0 && _entityTypeLookup.TryGetValue(currentId, out var entityType) && seen.Add(currentId))
+        {
+            result.Add(currentId);
+            currentId = entityType.ParentEntityTypeId ?? 0;
+        }
+
+        return result;
+    }
+
+    private List<EntityFieldOption> GetFieldOptions(int fieldId)
+    {
+        return _customFieldOptions.TryGetValue(fieldId, out var options)
+            ? options
+            : new List<EntityFieldOption>();
+    }
+
+    private string GetCustomFieldValue(int fieldId, string defaultValue = null)
+    {
+        if (_customFieldValues.TryGetValue(fieldId, out var value))
+        {
+            return value ?? string.Empty;
+        }
+
+        return defaultValue ?? string.Empty;
+    }
+
+    private bool GetCustomFieldBoolValue(int fieldId, string defaultValue = null)
+    {
+        var value = GetCustomFieldValue(fieldId, defaultValue);
+        return bool.TryParse(value, out var boolValue) && boolValue;
+    }
+
+    private void SetCustomFieldValue(int fieldId, string value)
+    {
+        _customFieldValues[fieldId] = value ?? string.Empty;
+    }
+
+    private void TryLoadCustomFieldValues(string settingsJson)
+    {
+        try
+        {
+            var values = JsonSerializer.Deserialize<Dictionary<int, string>>(settingsJson);
+            if (values != null)
+            {
+                _customFieldValues = values;
+            }
+        }
+        catch
+        {
+            // ignore invalid custom field payloads in Settings
+        }
+    }
+
+    private string BuildSettingsWithCustomFields()
+    {
+        var customJson = _customFieldValues.Any()
+            ? JsonSerializer.Serialize(_customFieldValues)
+            : "{}";
+
+        if (string.IsNullOrWhiteSpace(_settings))
+        {
+            return customJson;
+        }
+
+        return _settings;
+    }
+
+    private async Task Save()
+    {
+        try
+        {
+            validated = true;
+            var interop = new Oqtane.UI.Interop(JSRuntime);
+            if (await interop.FormValid(form))
+            {
+                if (PageState.Action == "Add")
+                {
+                    Entity Entity = new Entity();
+                    Entity.SiteId = PageState.Site.SiteId;
+                    Entity.ModuleId = ModuleState.ModuleId;
+                    Entity.EntityTypeId = _entityTypeId;
+                    Entity.Name = _name;
+                    Entity.Key = string.IsNullOrWhiteSpace(_key) ? null : _key;
+                    Entity.Description = string.IsNullOrWhiteSpace(_description) ? null : _description;
+                    Entity.ParentEntityId = string.IsNullOrWhiteSpace(_parentEntityId) ? null : int.Parse(_parentEntityId);
+                    Entity.Status = string.IsNullOrWhiteSpace(_status) ? null : _status;
+                    Entity.SortOrder = _sortOrder;
+                    Entity.IsEnabled = bool.Parse(_isEnabled);
+                    Entity.IsFeatured = bool.Parse(_isFeatured);
+                    Entity.IsPublished = bool.Parse(_isPublished);
+                    Entity.PublishStartDate = _publishStartDate;
+                    Entity.PublishEndDate = _publishEndDate;
+                    Entity.Settings = BuildSettingsWithCustomFields();
+                    Entity = await ClientEntityService.AddEntityAsync(Entity);
+                    await logger.LogInformation("Entity Added {Entity}", Entity);
+                }
+                else
+                {
+                    Entity Entity = await ClientEntityService.GetEntityAsync(_id, ModuleState.ModuleId);
+                    Entity.EntityTypeId = _entityTypeId;
+                    Entity.Name = _name;
+                    Entity.Key = string.IsNullOrWhiteSpace(_key) ? null : _key;
+                    Entity.Description = string.IsNullOrWhiteSpace(_description) ? null : _description;
+                    Entity.ParentEntityId = string.IsNullOrWhiteSpace(_parentEntityId) ? null : int.Parse(_parentEntityId);
+                    Entity.Status = string.IsNullOrWhiteSpace(_status) ? null : _status;
+                    Entity.SortOrder = _sortOrder;
+                    Entity.IsEnabled = bool.Parse(_isEnabled);
+                    Entity.IsFeatured = bool.Parse(_isFeatured);
+                    Entity.IsPublished = bool.Parse(_isPublished);
+                    Entity.PublishStartDate = _publishStartDate;
+                    Entity.PublishEndDate = _publishEndDate;
+                    Entity.Settings = BuildSettingsWithCustomFields();
+                    await ClientEntityService.UpdateEntityAsync(Entity);
+                    await logger.LogInformation("Entity Updated {Entity}", Entity);
+                }
+                NavigationManager.NavigateTo(NavigateUrl(ModuleState.ModuleId, "EntityList"));
+            }
+            else
+            {
+                AddModuleMessage(Localizer["Message.SaveValidation"], MessageType.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Saving Entity {Error}", ex.Message);
+            AddModuleMessage(Localizer["Message.SaveError"], MessageType.Error);
+        }
+    }
+}

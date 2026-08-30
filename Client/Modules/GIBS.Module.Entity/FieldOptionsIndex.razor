@@ -1,0 +1,99 @@
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+@using GIBS.Module.Entity.Helpers
+
+@namespace GIBS.Module.Entity
+@inherits ModuleBase
+@inject IEntityFieldOptionService EntityFieldOptionService
+@inject IEntityFieldService EntityFieldService
+@inject NavigationManager NavigationManager
+@inject IStringLocalizer<FieldOptionsIndex> Localizer
+
+@if (_fieldOptions == null)
+{
+    <p><em>@Localizer["Loading"]</em></p>
+}
+else
+{
+    <h4>@_fieldName - Options</h4>
+    <NavLink class="btn btn-secondary" href="@NavigateUrl($"FieldsEdit", $"id={_fieldId}&entitytypeid={_entityTypeId}")">@Localizer["Back"]</NavLink>
+    <ActionLink Action="FieldOptionsEdit" Parameters="@($"fieldid={_fieldId}")" Security="SecurityAccessLevel.Edit" Text="Add Option" ResourceKey="Add" Class="btn btn-success" />
+    <br /><br />
+
+    @if (_fieldOptions.Any())
+    {
+        <Pager Items="@_fieldOptions">
+            <Header>
+                <th style="width: 1px;">&nbsp;</th>
+                <th style="width: 1px;">&nbsp;</th>
+                <th>@Localizer["DisplayText"]</th>
+                <th>@Localizer["Value"]</th>
+                <th>@Localizer["Key"]</th>
+                <th style="width: 1px;">@Localizer["Default"]</th>
+                <th style="width: 1px;">@Localizer["Enabled"]</th>
+            </Header>
+            <Row>
+                <td><ActionLink Action="FieldOptionsEdit" Parameters="@($"id={context.FieldOptionId}&fieldid={_fieldId}")" ResourceKey="Edit" /></td>
+                <td><ActionDialog Header="Delete Option" Message="Are You Sure You Wish To Delete This Option?" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete" Id="@context.FieldOptionId.ToString()" /></td>
+                <td>@context.DisplayText</td>
+                <td>@context.Value</td>
+                <td>@context.Key</td>
+                <td>@(context.IsDefault ? Localizer["Yes"] : Localizer["No"])</td>
+                <td>@(context.IsEnabled ? Localizer["Yes"] : Localizer["No"])</td>
+            </Row>
+        </Pager>
+    }
+    else
+    {
+        <p>@Localizer["Message.DisplayNone"]</p>
+    }
+}
+
+@code {
+    public override string RenderMode => RenderModes.Static;
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.View;
+
+    private int _fieldId;
+    private int _entityTypeId;
+    private string _fieldName = string.Empty;
+    private List<EntityFieldOption> _fieldOptions;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Use helper to safely get fieldid with validation
+            if (!QueryStringHelper.TryGetInt(PageState.QueryString, "fieldid", out _fieldId) || _fieldId <= 0)
+            {
+                AddModuleMessage(Localizer["Error.MissingField"], MessageType.Error);
+                return;
+            }
+
+            var field = await EntityFieldService.GetFieldAsync(_fieldId, ModuleState.ModuleId);
+            _fieldName = field?.Name ?? "Unknown";
+            _entityTypeId = field?.EntityTypeId ?? 0;
+            _fieldOptions = await EntityFieldOptionService.GetFieldOptionsAsync(_fieldId, ModuleState.ModuleId);
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Field Options {Error}", ex.Message);
+            AddModuleMessage(Localizer["Message.LoadError"], MessageType.Error);
+        }
+    }
+
+    private async Task Delete(EntityFieldOption option)
+    {
+        try
+        {
+            await EntityFieldOptionService.DeleteFieldOptionAsync(option.FieldOptionId, ModuleState.ModuleId);
+            await logger.LogInformation("Field Option Deleted {Option}", option);
+            _fieldOptions = await EntityFieldOptionService.GetFieldOptionsAsync(_fieldId, ModuleState.ModuleId);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Deleting Field Option {Option} {Error}", option, ex.Message);
+            AddModuleMessage(Localizer["Message.DeleteError"], MessageType.Error);
+        }
+    }
+}

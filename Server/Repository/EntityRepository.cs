@@ -27,7 +27,10 @@ namespace GIBS.Module.Entity.Repository
         public IEnumerable<Models.Entity> GetEntitys(int ModuleId)
         {
             using var db = _factory.CreateDbContext();
-            return db.Entity.Where(item => item.ModuleId == ModuleId).ToList();
+            return db.Entity
+                .Include(item => item.EntityType)
+                .Where(item => item.ModuleId == ModuleId)
+                .ToList();
         }
 
         public Models.Entity GetEntity(int EntityId)
@@ -40,11 +43,16 @@ namespace GIBS.Module.Entity.Repository
             using var db = _factory.CreateDbContext();
             if (tracking)
             {
-                return db.Entity.Find(EntityId);
+                return db.Entity
+                    .Include(item => item.EntityType)
+                    .FirstOrDefault(item => item.EntityId == EntityId);
             }
             else
             {
-                return db.Entity.AsNoTracking().FirstOrDefault(item => item.EntityId == EntityId);
+                return db.Entity
+                    .AsNoTracking()
+                    .Include(item => item.EntityType)
+                    .FirstOrDefault(item => item.EntityId == EntityId);
             }
         }
 

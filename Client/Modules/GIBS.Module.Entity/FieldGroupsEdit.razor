@@ -1,0 +1,204 @@
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+@using GIBS.Module.Entity.Helpers
+
+@namespace GIBS.Module.Entity
+@inherits ModuleBase
+@inject NavigationManager NavigationManager
+@inject IEntityFieldGroupService EntityFieldGroupService
+@inject IEntityTypeService EntityTypeService
+@inject IStringLocalizer<FieldGroupsEdit> Localizer
+
+<form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
+    <div class="container">
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="name" HelpText="Display name of the field group" ResourceKey="Name">Name:</Label>
+            <div class="col-sm-9">
+                <input id="name" class="form-control" @bind="@_name" maxlength="100" required />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="key" HelpText="Unique stable key for this group" ResourceKey="Key">Key:</Label>
+            <div class="col-sm-9">
+                <input id="key" class="form-control" @bind="@_key" maxlength="100" required />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="entitytypeid" HelpText="Entity type that owns this field group" ResourceKey="EntityType">Entity Type:</Label>
+            <div class="col-sm-9">
+                <select id="entitytypeid" class="form-select" @bind="@_entityTypeId" required>
+                    <option value="0">@Localizer["Select"]</option>
+                    @foreach (var entityType in _entityTypes)
+                    {
+                        <option value="@entityType.EntityTypeId">@entityType.Name</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="description" HelpText="Description of the field group" ResourceKey="Description">Description:</Label>
+            <div class="col-sm-9">
+                <textarea id="description" class="form-control" @bind="@_description" rows="2" maxlength="500"></textarea>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="sortorder" HelpText="Display order" ResourceKey="SortOrder">Sort Order:</Label>
+            <div class="col-sm-9">
+                <input id="sortorder" type="number" class="form-control" @bind="@_sortOrder" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="isenabled" HelpText="Is this field group enabled?" ResourceKey="Enabled">Enabled?</Label>
+            <div class="col-sm-9">
+                <select id="isenabled" class="form-select" @bind="@_isEnabled">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    <br />
+    <button type="button" class="btn btn-success" @onclick="SaveFieldGroup">@Localizer["Save"]</button>
+    <NavLink class="btn btn-secondary" href="@NavigateUrl("FieldGroupsIndex", $"entitytypeid={_entityTypeId}")">@Localizer["Cancel"]</NavLink>
+    <br /><br />
+    @if (_fieldGroupId != -1)
+    {
+        <AuditInfo CreatedBy="@_createdBy" CreatedOn="@_createdOn" ModifiedBy="@_modifiedBy" ModifiedOn="@_modifiedOn" />
+    }
+</form>
+
+@code {
+    private ElementReference form;
+    private bool validated = false;
+
+    private int _fieldGroupId = -1;
+    private int _entityTypeId;
+    private List<EntityType> _entityTypes = new();
+    private string _name = string.Empty;
+    private string _key = string.Empty;
+    private string _description = string.Empty;
+    private int _sortOrder = 0;
+    private string _isEnabled = "True";
+    private string _createdBy;
+    private DateTime _createdOn;
+    private string _modifiedBy;
+    private DateTime _modifiedOn;
+
+    public override string RenderMode => RenderModes.Interactive;
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+            if (_entityTypes == null || !_entityTypes.Any())
+            {
+                AddModuleMessage(Localizer["Error.MissingEntityType"], MessageType.Error);
+                return;
+            }
+
+            _entityTypeId = _entityTypes[0].EntityTypeId;
+
+            // Use helper to safely get the field group id if editing
+            if (QueryStringHelper.TryGetInt(PageState.QueryString, "id", out _fieldGroupId) && _fieldGroupId > 0)
+            {
+                var fieldGroup = await EntityFieldGroupService.GetFieldGroupAsync(_fieldGroupId, ModuleState.ModuleId);
+                if (fieldGroup != null)
+                {
+                    _entityTypeId = fieldGroup.EntityTypeId;
+                    _name = fieldGroup.Name;
+                    _key = fieldGroup.Key;
+                    _description = fieldGroup.Description ?? string.Empty;
+                    _sortOrder = fieldGroup.SortOrder;
+                    _isEnabled = fieldGroup.IsEnabled.ToString();
+                    _createdBy = fieldGroup.CreatedBy;
+                    _createdOn = fieldGroup.CreatedOn;
+                    _modifiedBy = fieldGroup.ModifiedBy;
+                    _modifiedOn = fieldGroup.ModifiedOn;
+                }
+            }
+            else
+            {
+                _fieldGroupId = -1;
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Field Group {FieldGroupId} {Error}", _fieldGroupId, ex.Message);
+            AddModuleMessage(Localizer["Error.LoadFieldGroup"], MessageType.Error);
+        }
+    }
+
+    private async Task SaveFieldGroup()
+    {
+        validated = true;
+        var interop = new Oqtane.UI.Interop(JSRuntime);
+        if (await interop.FormValid(form))
+        {
+            try
+            {
+                await logger.LogInformation("Attempting to save Field Group EntityTypeId {EntityTypeId} FieldGroupId {FieldGroupId}", _entityTypeId, _fieldGroupId);
+                // Validate entityTypeId before proceeding
+                if (_entityTypeId <= 0)
+                {
+                    AddModuleMessage(Localizer["Error.MissingEntityType"], MessageType.Error);
+                    return;
+                }
+
+                var entityType = await EntityTypeService.GetEntityTypeAsync(_entityTypeId, ModuleState.ModuleId);
+                if (entityType == null)
+                {
+                    await logger.LogWarning("Field Group Save blocked - invalid EntityTypeId {EntityTypeId} for Module {ModuleId}", _entityTypeId, ModuleState.ModuleId);
+                    AddModuleMessage(Localizer["Error.MissingEntityType"], MessageType.Error);
+                    return;
+                }
+                EntityFieldGroup fieldGroup;
+                if (_fieldGroupId > 0)
+                {
+                    fieldGroup = await EntityFieldGroupService.GetFieldGroupAsync(_fieldGroupId, ModuleState.ModuleId);
+
+                    // Check if field group was found
+                    if (fieldGroup == null)
+                    {
+                        AddModuleMessage(Localizer["Error.FieldGroupNotFound"], MessageType.Error);
+                        return;
+                    }
+                }
+                else
+                {
+                    fieldGroup = new EntityFieldGroup();
+                }
+
+                fieldGroup.EntityTypeId = _entityTypeId;
+                fieldGroup.Name = _name;
+                fieldGroup.Key = _key;
+                fieldGroup.Description = _description;
+                fieldGroup.SortOrder = _sortOrder;
+                fieldGroup.IsEnabled = bool.Parse(_isEnabled);
+
+                if (_fieldGroupId > 0)
+                {
+                    await EntityFieldGroupService.UpdateFieldGroupAsync(fieldGroup);
+                    await logger.LogInformation("Field Group Updated {FieldGroup}", fieldGroup);
+                }
+                else
+                {
+                    fieldGroup = await EntityFieldGroupService.AddFieldGroupAsync(fieldGroup);
+                    await logger.LogInformation("Field Group Added {FieldGroup}", fieldGroup);
+                }
+
+                NavigationManager.NavigateTo(NavigateUrl(ModuleState.ModuleId, "FieldGroupsIndex", $"entitytypeid={_entityTypeId}"));
+            }
+            catch (Exception ex)
+            {
+                await logger.LogError(ex, "Error Saving Field Group EntityTypeId {EntityTypeId} FieldGroupId {FieldGroupId} {Error}", _entityTypeId, _fieldGroupId, ex.Message);
+                AddModuleMessage(Localizer["Error.SaveFieldGroup"], MessageType.Error);
+            }
+        }
+        else
+        {
+            AddModuleMessage(Localizer["Message.SaveValidation"], MessageType.Warning);
+        }
+    }
+}

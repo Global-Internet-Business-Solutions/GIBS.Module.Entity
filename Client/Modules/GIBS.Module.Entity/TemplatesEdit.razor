@@ -1,0 +1,221 @@
+@using Oqtane.Modules.Controls
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+@using GIBS.Module.Entity.Helpers
+
+@namespace GIBS.Module.Entity
+@inherits ModuleBase
+@inject NavigationManager NavigationManager
+@inject IEntityTemplateService EntityTemplateService
+@inject IStringLocalizer<TemplatesEdit> Localizer
+
+<form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
+    <div class="container">
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="templatetype" HelpText="Template behavior type" ResourceKey="TemplateType">Template Type:</Label>
+            <div class="col-sm-9">
+                <select id="templatetype" class="form-select" @bind="@_templateType">
+                    <option value="Listing">Listing</option>
+                    <option value="Detail">Detail</option>
+                    <option value="Featured">Featured</option>
+                </select>
+            </div>
+        </div>
+
+
+        <hr />
+
+        <p class="text-muted small">Use tokens like <code>[Name]</code>, <code>[Status]</code>, <code>[Field:FieldKey]</code>, <code>[HtmlContent:FieldKey]</code></p>
+
+
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="header" HelpText="Template content rendered before items" ResourceKey="Header">Header:</Label>
+            <div class="col-sm-9">
+                <RichTextEditor @ref="_headerEditor" Content="@_header" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="item" HelpText="Template content rendered for each item" ResourceKey="Item">Item:</Label>
+            <div class="col-sm-9">
+                <RichTextEditor @ref="_itemEditor" Content="@_item" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="alternate" HelpText="Template content for alternating rows" ResourceKey="Alternate">Alternate:</Label>
+            <div class="col-sm-9">
+                <RichTextEditor @ref="_alternateEditor" Content="@_alternate" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="separator" HelpText="Template content between items" ResourceKey="Separator">Separator:</Label>
+            <div class="col-sm-9">
+                <input id="separator" class="form-control" @bind="@_separator" maxlength="200" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="footer" HelpText="Template content rendered after items" ResourceKey="Footer">Footer:</Label>
+            <div class="col-sm-9">
+                <RichTextEditor @ref="_footerEditor" Content="@_footer" />
+            </div>
+        </div>
+        <hr />
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="pagetitle" HelpText="Optional browser title" ResourceKey="PageTitle">Page Title:</Label>
+            <div class="col-sm-9">
+                <input id="pagetitle" class="form-control" @bind="@_pageTitle" maxlength="200" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="pageheader" HelpText="Optional heading displayed on page" ResourceKey="PageHeader">Page Header:</Label>
+            <div class="col-sm-9">
+                <input id="pageheader" class="form-control" @bind="@_pageHeader" maxlength="200" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="pagedescription" HelpText="Optional meta description" ResourceKey="PageDescription">Page Description:</Label>
+            <div class="col-sm-9">
+                <textarea id="pagedescription" class="form-control" @bind="@_pageDescription" rows="2" maxlength="500"></textarea>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="pagekeywords" HelpText="Optional meta keywords" ResourceKey="PageKeywords">Page Keywords:</Label>
+            <div class="col-sm-9">
+                <textarea id="pagekeywords" class="form-control" @bind="@_pageKeywords" rows="2" maxlength="500"></textarea>
+            </div>
+        </div>
+
+        <br />
+        <button type="button" class="btn btn-success" @onclick="SaveTemplate">@Localizer["Save"]</button>
+        <NavLink class="btn btn-secondary" href="@NavigateUrl("TemplatesIndex")">@Localizer["Cancel"]</NavLink>
+        <br /><br />
+        @if (_templateId != -1)
+        {
+            <AuditInfo CreatedBy="@_createdBy" CreatedOn="@_createdOn" ModifiedBy="@_modifiedBy" ModifiedOn="@_modifiedOn" />
+        }
+    </div>
+</form>
+
+@code {
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
+    public override bool UseAdminContainer => false;
+    private ElementReference form;
+    private bool validated = false;
+
+    private int _templateId = -1;
+    private string _templateType = "Listing";
+    private string _header = string.Empty;
+    private string _item = string.Empty;
+    private string _alternate = string.Empty;
+    private string _separator = string.Empty;
+    private string _footer = string.Empty;
+    private string _pageTitle = string.Empty;
+    private string _pageDescription = string.Empty;
+    private string _pageKeywords = string.Empty;
+    private string _pageHeader = string.Empty;
+
+    private RichTextEditor _headerEditor;
+    private RichTextEditor _itemEditor;
+    private RichTextEditor _alternateEditor;
+    private RichTextEditor _footerEditor;
+
+    private string _createdBy;
+    private DateTime _createdOn;
+    private string _modifiedBy;
+    private DateTime _modifiedOn;
+
+    
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (QueryStringHelper.TryGetInt(PageState.QueryString, "id", out _templateId) && _templateId > 0)
+            {
+                var template = await EntityTemplateService.GetTemplateAsync(_templateId, ModuleState.ModuleId);
+                if (template != null)
+                {
+                    _templateType = string.IsNullOrWhiteSpace(template.TemplateType) ? "Listing" : template.TemplateType;
+                    _header = template.Header ?? string.Empty;
+                    _item = template.Item ?? string.Empty;
+                    _alternate = template.Alternate ?? string.Empty;
+                    _separator = template.Separator ?? string.Empty;
+                    _footer = template.Footer ?? string.Empty;
+                    _pageTitle = template.PageTitle ?? string.Empty;
+                    _pageDescription = template.PageDescription ?? string.Empty;
+                    _pageKeywords = template.PageKeywords ?? string.Empty;
+                    _pageHeader = template.PageHeader ?? string.Empty;
+                    _createdBy = template.CreatedBy;
+                    _createdOn = template.CreatedOn;
+                    _modifiedBy = template.ModifiedBy;
+                    _modifiedOn = template.ModifiedOn;
+                }
+            }
+            else
+            {
+                _templateId = -1;
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Template {TemplateId} {Error}", _templateId, ex.Message);
+            AddModuleMessage(Localizer["Message.LoadError"], MessageType.Error);
+        }
+    }
+
+    private async Task SaveTemplate()
+    {
+        validated = true;
+        var interop = new Oqtane.UI.Interop(JSRuntime);
+        if (await interop.FormValid(form))
+        {
+            try
+            {
+                EntityTemplate template;
+                if (_templateId != -1)
+                {
+                    template = await EntityTemplateService.GetTemplateAsync(_templateId, ModuleState.ModuleId);
+                }
+                else
+                {
+                    template = new EntityTemplate
+                    {
+                        ModuleId = ModuleState.ModuleId
+                    };
+                }
+
+                template.TemplateType = _templateType;
+                template.Header = _headerEditor != null ? await _headerEditor.GetHtml() : _header;
+                template.Item = _itemEditor != null ? await _itemEditor.GetHtml() : _item;
+                template.Alternate = _alternateEditor != null ? await _alternateEditor.GetHtml() : _alternate;
+                template.Separator = _separator;
+                template.Footer = _footerEditor != null ? await _footerEditor.GetHtml() : _footer;
+                template.PageTitle = _pageTitle;
+                template.PageDescription = _pageDescription;
+                template.PageKeywords = _pageKeywords;
+                template.PageHeader = _pageHeader;
+
+                if (_templateId != -1)
+                {
+                    await EntityTemplateService.UpdateTemplateAsync(template);
+                    await logger.LogInformation("Template Updated {Template}", template);
+                }
+                else
+                {
+                    template = await EntityTemplateService.AddTemplateAsync(template);
+                    await logger.LogInformation("Template Added {Template}", template);
+                }
+
+                NavigationManager.NavigateTo(NavigateUrl(ModuleState.ModuleId, "TemplatesIndex"));
+            }
+            catch (Exception ex)
+            {
+                await logger.LogError(ex, "Error Saving Template {Error}", ex.Message);
+                AddModuleMessage(Localizer["Message.SaveError"], MessageType.Error);
+            }
+        }
+        else
+        {
+            AddModuleMessage(Localizer["Message.SaveValidation"], MessageType.Warning);
+        }
+    }
+}

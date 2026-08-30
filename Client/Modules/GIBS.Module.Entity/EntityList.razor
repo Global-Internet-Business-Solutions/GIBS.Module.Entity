@@ -1,0 +1,182 @@
+@using System.Text.Json
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+
+@namespace GIBS.Module.Entity
+@inherits ModuleBase
+@inject IEntityService ClientEntityService
+@inject IEntityFieldService EntityFieldService
+@inject NavigationManager NavigationManager
+@inject IStringLocalizer<EntityList> Localizer
+
+    <div class="row mb-4">
+        <div class="col">
+            <h2>@Localizer["BackOffice_Title"]</h2>
+            <p class="text-muted">@Localizer["BackOffice_Description"]</p>
+           <div class="d-flex justify-content-between">
+               <NavLink class="btn btn-secondary" href="@NavigateUrl()">
+                   <i class="oi oi-arrow-left"></i> @Localizer["Return"]
+               </NavLink>
+               <ActionLink Action="Add" Security="SecurityAccessLevel.Edit" Text="Add Entity" Class="btn btn-success" ResourceKey="Add" />
+           </div>
+        </div>
+    </div>
+
+@if (_Entitys == null)
+{
+    <p><em>@Localizer["Loading"]</em></p>
+}
+else
+{
+    @if (@_Entitys.Count != 0)
+    {
+        <Pager Items="@_Entitys">
+            <Header>
+                <th style="width: 1px;">&nbsp;</th>
+                <th style="width: 1px;">&nbsp;</th>
+                <th>@Localizer["Name"]</th>
+                <th>@Localizer["Type"]</th>
+                <th>@Localizer["Status"]</th>
+                @foreach (var field in _managerFields)
+                {
+                    <th>@GetFieldDisplayName(field)</th>
+                }
+                <th>@Localizer["IsEnabled"]</th>
+                <th>@Localizer["SortOrder"]</th>
+            </Header>
+            <Row>
+                <td><ActionLink Action="Edit" Parameters="@($"id={context.EntityId}")" ResourceKey="Edit" /></td>
+                <td><ActionDialog Header="Delete Entity" Message="Are You Sure You Wish To Delete This Entity?" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete" Id="@context.EntityId.ToString()" /></td>
+                <td>@context.Name</td>
+                <td>@context.EntityType?.Name</td>
+                <td>@context.Status</td>
+                @foreach (var field in _managerFields)
+                {
+                    <td>@GetManagerFieldValue(context, field.FieldId)</td>
+                }
+                <td>@context.IsEnabled</td>
+                <td>@context.SortOrder</td>
+            </Row>
+        </Pager>
+    }
+    else
+    {
+        <p>@Localizer["Message.DisplayNone"]</p>
+    }
+}
+
+@code {
+    public override string Actions => "EntityList";
+
+    public override string RenderMode => RenderModes.Static;
+    public override bool UseAdminContainer => false;
+
+    public override List<Resource> Resources => new List<Resource>()
+    {
+        new Stylesheet("_content/GIBS.Module.Entity/Module.css"),
+        new Script("_content/GIBS.Module.Entity/Module.js")
+    };
+
+    List<Entity> _Entitys;
+    Dictionary<int, List<EntityField>> _managerFieldsByEntityType = new();
+    List<EntityField> _managerFields = new();
+    Dictionary<int, Dictionary<int, string>> _entityCustomValues = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Entity {Error}", ex.Message);
+            AddModuleMessage(Localizer["Message.LoadError"], MessageType.Error);
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _Entitys = await ClientEntityService.GetEntitysAsync(ModuleState.ModuleId);
+
+        var entityTypeIds = _Entitys
+            .Select(e => e.EntityTypeId)
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+
+        _managerFieldsByEntityType = new Dictionary<int, List<EntityField>>();
+        foreach (var entityTypeId in entityTypeIds)
+        {
+            var fields = await EntityFieldService.GetFieldsAsync(entityTypeId, ModuleState.ModuleId);
+            _managerFieldsByEntityType[entityTypeId] = fields
+                .Where(f => f.IsManagerOnly)
+                .OrderBy(f => f.SortOrder)
+                .ThenBy(f => f.Name)
+                .ToList();
+        }
+
+        _managerFields = _managerFieldsByEntityType
+            .SelectMany(x => x.Value)
+            .GroupBy(f => f.FieldId)
+            .Select(g => g.First())
+            .OrderBy(f => f.SortOrder)
+            .ThenBy(f => f.Name)
+            .ToList();
+
+        _entityCustomValues = _Entitys.ToDictionary(e => e.EntityId, e => ParseCustomFieldValues(e.Settings));
+    }
+
+    private Dictionary<int, string> ParseCustomFieldValues(string settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings))
+        {
+            return new Dictionary<int, string>();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<int, string>>(settings) ?? new Dictionary<int, string>();
+        }
+        catch
+        {
+            return new Dictionary<int, string>();
+        }
+    }
+
+    private string GetFieldDisplayName(EntityField field)
+    {
+        return string.IsNullOrWhiteSpace(field.Label) ? field.Name : field.Label;
+    }
+
+    private string GetManagerFieldValue(Entity entity, int fieldId)
+    {
+        if (!_managerFieldsByEntityType.TryGetValue(entity.EntityTypeId, out var fields) || !fields.Any(f => f.FieldId == fieldId))
+        {
+            return string.Empty;
+        }
+
+        if (_entityCustomValues.TryGetValue(entity.EntityId, out var values) && values.TryGetValue(fieldId, out var value))
+        {
+            return value;
+        }
+
+        return string.Empty;
+    }
+
+    private async Task Delete(Entity Entity)
+    {
+        try
+        {
+            await ClientEntityService.DeleteEntityAsync(Entity.EntityId, ModuleState.ModuleId);
+            await logger.LogInformation("Entity Deleted {Entity}", Entity);
+            await LoadDataAsync();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Deleting Entity {Entity} {Error}", Entity, ex.Message);
+            AddModuleMessage(Localizer["Message.DeleteError"], MessageType.Error);
+        }
+    }
+}

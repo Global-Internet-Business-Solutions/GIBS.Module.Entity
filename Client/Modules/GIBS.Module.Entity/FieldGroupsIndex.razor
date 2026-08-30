@@ -1,0 +1,101 @@
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+@using GIBS.Module.Entity.Helpers
+
+@namespace GIBS.Module.Entity
+@inherits ModuleBase
+@inject IEntityFieldGroupService EntityFieldGroupService
+@inject IEntityTypeService EntityTypeService
+@inject NavigationManager NavigationManager
+@inject IStringLocalizer<FieldGroupsIndex> Localizer
+
+@if (_fieldGroups == null)
+{
+    <p><em>@Localizer["Loading"]</em></p>
+}
+else
+{
+    <h4>@_entityTypeName - Field Groups</h4>
+    <NavLink class="btn btn-secondary" href="@NavigateUrl(@ModuleState.ModuleId, "BackOffice")">@Localizer["Back"]</NavLink>
+    <ActionLink Action="FieldGroupsEdit" Parameters="@($"entitytypeid={_entityTypeId}")" Security="SecurityAccessLevel.Edit" Text="Add Field Group" ResourceKey="Add" Class="btn btn-success" />
+    <br /><br />
+
+    @if (_fieldGroups.Any())
+    {
+        <Pager Items="@_fieldGroups">
+            <Header>
+                <th style="width: 1px;">&nbsp;</th>
+                <th style="width: 1px;">&nbsp;</th>
+                <th>@Localizer["Name"]</th>
+                <th>@Localizer["Key"]</th>
+                <th>@Localizer["Description"]</th>
+                <th>@Localizer["SortOrder"]</th>
+                <th>@Localizer["Enabled"]</th>
+            </Header>
+            <Row>
+                <td>
+                    <ActionLink Action="FieldGroupsEdit" Parameters="@($"id={context.FieldGroupId}&entitytypeid={_entityTypeId}")" Security="SecurityAccessLevel.Edit" ResourceKey="Edit" />
+                </td>
+                <td>
+                    <ActionDialog Header="Delete Field Group" Message="@string.Format(Localizer["Confirm.Delete"], context.Name)" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete" />
+                </td>
+                <td>@context.Name</td>
+                <td>@context.Key</td>
+                <td>@context.Description</td>
+                <td>@context.SortOrder</td>
+                <td>@(context.IsEnabled ? Localizer["Yes"] : Localizer["No"])</td>
+            </Row>
+        </Pager>
+    }
+    else
+    {
+        <p>@Localizer["NoFieldGroups"]</p>
+    }
+}
+
+@code {
+    public override string RenderMode => RenderModes.Static;
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.View;
+
+    private int _entityTypeId;
+    private string _entityTypeName = string.Empty;
+    private List<EntityFieldGroup> _fieldGroups;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Use helper to safely get entitytypeid with validation
+            if (!QueryStringHelper.TryGetInt(PageState.QueryString, "entitytypeid", out _entityTypeId) || _entityTypeId <= 0)
+            {
+                AddModuleMessage(Localizer["Error.MissingEntityType"], MessageType.Error);
+                return;
+            }
+
+            var entityType = await EntityTypeService.GetEntityTypeAsync(_entityTypeId, ModuleState.ModuleId);
+            _entityTypeName = entityType?.Name ?? "Unknown";
+            _fieldGroups = await EntityFieldGroupService.GetFieldGroupsAsync(_entityTypeId, ModuleState.ModuleId);
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Field Groups {Error}", ex.Message);
+            AddModuleMessage(Localizer["Message.LoadError"], MessageType.Error);
+        }
+    }
+
+    private async Task Delete(EntityFieldGroup fieldGroup)
+    {
+        try
+        {
+            await EntityFieldGroupService.DeleteFieldGroupAsync(fieldGroup.FieldGroupId, ModuleState.ModuleId);
+            await logger.LogInformation("Field Group Deleted {FieldGroup}", fieldGroup);
+            _fieldGroups = await EntityFieldGroupService.GetFieldGroupsAsync(_entityTypeId, ModuleState.ModuleId);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Deleting Field Group {FieldGroupId} {Error}", fieldGroup.FieldGroupId, ex.Message);
+            AddModuleMessage(Localizer["Error.DeleteFieldGroup"], MessageType.Error);
+        }
+    }
+}

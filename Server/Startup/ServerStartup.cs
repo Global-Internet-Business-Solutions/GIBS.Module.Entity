@@ -21,7 +21,17 @@ namespace GIBS.Module.Entity.Startup
 
         public void ConfigureServices(IServiceCollection services)
         {
+            // Existing Entity service
             services.AddTransient<IEntityService, ServerEntityService>();
+
+            // Phase 1: Entity Definition Framework services
+            services.AddTransient<IEntityTypeService, ServerEntityTypeService>();
+            services.AddTransient<IEntityTemplateService, ServerEntityTemplateService>();
+            services.AddTransient<IEntityFieldGroupService, ServerEntityFieldGroupService>();
+            services.AddTransient<IEntityFieldService, ServerEntityFieldService>();
+            services.AddTransient<IEntityFieldOptionService, ServerEntityFieldOptionService>();
+
+            // DbContext factory
             services.AddDbContextFactory<EntityContext>(opt => { }, ServiceLifetime.Transient);
         }
     }

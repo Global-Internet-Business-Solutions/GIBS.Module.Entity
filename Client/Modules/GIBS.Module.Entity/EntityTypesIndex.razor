@@ -1,0 +1,84 @@
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+
+@namespace GIBS.Module.Entity
+@inherits ModuleBase
+@inject IEntityTypeService EntityTypeService
+@inject NavigationManager NavigationManager
+@inject IStringLocalizer<EntityTypesIndex> Localizer
+
+@if (_entityTypes == null)
+{
+    <p><em>@Localizer["Loading"]</em></p>
+}
+else
+{
+    <NavLink class="btn btn-secondary" href="@NavigateUrl()">    
+        <i class="oi oi-arrow-left"></i> @Localizer["Back"]
+    </NavLink>
+    <ActionLink Action="EntityTypesEdit" Security="SecurityAccessLevel.Edit" Text="Add Entity Type" ResourceKey="Add" Class="btn btn-success" />
+    <br /><br />
+    @if (_entityTypes.Any())
+    {
+        <Pager Items="@_entityTypes">
+            <Header>
+                <th style="width: 1px;">&nbsp;</th>
+                <th style="width: 1px;">&nbsp;</th>
+                <th>@Localizer["Name"]</th>
+                <th>@Localizer["Key"]</th>
+                <th>@Localizer["Description"]</th>
+                <th style="width: 1px;">@Localizer["Enabled"]</th>
+                <th style="width: 1px;">@Localizer["System"]</th>
+            </Header>
+            <Row>
+                <td><ActionLink Action="EntityTypesEdit" Parameters="@($"id={context.EntityTypeId}")" ResourceKey="Edit" /></td>
+                <td><ActionDialog Header="Delete Entity Type" Message="Are You Sure You Wish To Delete This Entity Type?" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete" Id="@context.EntityTypeId.ToString()" /></td>
+                <td>@context.Name</td>
+                <td>@context.Key</td>
+                <td>@context.Description</td>
+                <td>@(context.IsEnabled ? Localizer["Yes"] : Localizer["No"])</td>
+                <td>@(context.IsSystem ? Localizer["Yes"] : Localizer["No"])</td>
+            </Row>
+        </Pager>
+    }
+    else
+    {
+        <p>@Localizer["Message.DisplayNone"]</p>
+    }
+}
+
+@code {
+    public override string RenderMode => RenderModes.Static;
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.View;
+
+    private List<EntityType> _entityTypes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Entity Types {Error}", ex.Message);
+            AddModuleMessage(Localizer["Message.LoadError"], MessageType.Error);
+        }
+    }
+
+    private async Task Delete(EntityType entityType)
+    {
+        try
+        {
+            await EntityTypeService.DeleteEntityTypeAsync(entityType.EntityTypeId, ModuleState.ModuleId);
+            await logger.LogInformation("Entity Type Deleted {EntityType}", entityType);
+            _entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Deleting Entity Type {EntityType} {Error}", entityType, ex.Message);
+            AddModuleMessage(Localizer["Message.DeleteError"], MessageType.Error);
+        }
+    }
+}

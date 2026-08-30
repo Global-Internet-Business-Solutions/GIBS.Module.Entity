@@ -1,0 +1,201 @@
+@using Oqtane.Modules.Controls
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+
+@namespace GIBS.Module.Entity
+@inherits ModuleBase
+@inject NavigationManager NavigationManager
+@inject IEntityTypeService EntityTypeService
+@inject IStringLocalizer<EntityTypesEdit> Localizer
+
+<form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
+    <div class="container">
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="name" HelpText="Name Of The Entity Type" ResourceKey="Name">Name:</Label>
+            <div class="col-sm-9">
+                <input id="name" class="form-control" @bind="@_name" maxlength="256" required />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="key" HelpText="Unique Stable Key For This Entity Type" ResourceKey="Key">Key:</Label>
+            <div class="col-sm-9">
+                <input id="key" class="form-control" @bind="@_key" maxlength="100" required />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="description" HelpText="Description Of The Entity Type" ResourceKey="Description">Description:</Label>
+            <div class="col-sm-9">
+                <textarea id="description" class="form-control" @bind="@_description" rows="3" maxlength="500"></textarea>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="parententitytypeid" HelpText="Optional Parent Entity Type For Inheritance" ResourceKey="ParentEntityType">Parent Entity Type:</Label>
+            <div class="col-sm-9">
+                <select id="parententitytypeid" class="form-select" @bind="@_parentEntityTypeId">
+                    <option value="">@Localizer["None"]</option>
+                    @foreach (var type in _availableEntityTypes)
+                    {
+                        <option value="@type.EntityTypeId">@type.Name</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="sortorder" HelpText="Order In Which Entity Type Appears" ResourceKey="SortOrder">Sort Order:</Label>
+            <div class="col-sm-9">
+                <input id="sortorder" type="number" class="form-control" @bind="@_sortOrder" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="isenabled" HelpText="Is This Entity Type Enabled?" ResourceKey="Enabled">Enabled?</Label>
+            <div class="col-sm-9">
+                <select id="isenabled" class="form-select" @bind="@_isEnabled">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="issystem" HelpText="Is This A System-Level Entity Type?" ResourceKey="System">System?</Label>
+            <div class="col-sm-9">
+                <select id="issystem" class="form-select" @bind="@_isSystem" disabled="@(_entityTypeId != -1)">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <hr />
+        <br /><br />
+        <button type="button" class="btn btn-success" @onclick="SaveEntityType">@Localizer["Save"]</button>
+        <NavLink class="btn btn-secondary" href="@NavigateUrl()">@Localizer["Cancel"]</NavLink>
+        @if (_entityTypeId != -1)
+        {
+            <br /><br />
+            <div class="btn-group" role="group">
+                <ActionLink Action="FieldsIndex" Parameters="@($"entitytypeid={_entityTypeId}")" Text="Manage Fields" Class="btn btn-primary" ResourceKey="ManageFields" />
+                <ActionLink Action="FieldGroupsIndex" Parameters="@($"entitytypeid={_entityTypeId}")" Text="Manage Field Groups" Class="btn btn-warning" ResourceKey="ManageFieldGroups" />
+                <ActionLink Action="TemplatesIndex" Text="Manage Templates" Class="btn btn-secondary" ResourceKey="ManageTemplates" />
+            </div>
+        }
+        <br /><br />
+        <AuditInfo CreatedBy="@_createdBy" CreatedOn="@_createdOn" ModifiedBy="@_modifiedBy" ModifiedOn="@_modifiedOn"></AuditInfo>
+    </div>
+</form>
+
+@code {
+
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
+    public override bool UseAdminContainer => false;
+
+    private ElementReference form;
+    private bool validated = false;
+
+    private int _entityTypeId = -1;
+    private string _name = string.Empty;
+    private string _key = string.Empty;
+    private string _description = string.Empty;
+    private string _parentEntityTypeId = string.Empty;
+    private int _sortOrder = 0;
+    private string _isEnabled = "True";
+    private string _isSystem = "False";
+    private string _createdBy;
+    private DateTime _createdOn;
+    private string _modifiedBy;
+    private DateTime _modifiedOn;
+
+    private List<EntityType> _availableEntityTypes = new();
+
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Load all entity types for parent selection
+            _availableEntityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+
+            if (PageState.QueryString.ContainsKey("id"))
+            {
+                _entityTypeId = int.Parse(PageState.QueryString["id"]);
+                var entityType = await EntityTypeService.GetEntityTypeAsync(_entityTypeId, ModuleState.ModuleId);
+                if (entityType != null)
+                {
+                    _name = entityType.Name;
+                    _key = entityType.Key;
+                    _description = entityType.Description ?? string.Empty;
+                    _parentEntityTypeId = entityType.ParentEntityTypeId?.ToString() ?? string.Empty;
+                    _sortOrder = entityType.SortOrder;
+                    _isEnabled = entityType.IsEnabled.ToString();
+                    _isSystem = entityType.IsSystem.ToString();
+                    _createdBy = entityType.CreatedBy;
+                    _createdOn = entityType.CreatedOn;
+                    _modifiedBy = entityType.ModifiedBy;
+                    _modifiedOn = entityType.ModifiedOn;
+
+                    // Remove self from parent selection
+                    _availableEntityTypes = _availableEntityTypes.Where(t => t.EntityTypeId != _entityTypeId).ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Entity Type {EntityTypeId} {Error}", _entityTypeId, ex.Message);
+            AddModuleMessage(Localizer["Error.LoadEntityType"], MessageType.Error);
+        }
+    }
+
+    private async Task SaveEntityType()
+    {
+        validated = true;
+        var interop = new Oqtane.UI.Interop(JSRuntime);
+        if (await interop.FormValid(form))
+        {
+            try
+            {
+                EntityType entityType;
+                if (_entityTypeId != -1)
+                {
+                    entityType = await EntityTypeService.GetEntityTypeAsync(_entityTypeId, ModuleState.ModuleId);
+                }
+                else
+                {
+                    entityType = new EntityType
+                    {
+                        SiteId = PageState.Site.SiteId,
+                        ModuleId = ModuleState.ModuleId
+                    };
+                }
+
+                entityType.Name = _name;
+                entityType.Key = _key;
+                entityType.Description = _description;
+                entityType.ParentEntityTypeId = string.IsNullOrEmpty(_parentEntityTypeId) ? null : int.Parse(_parentEntityTypeId);
+                entityType.SortOrder = _sortOrder;
+                entityType.IsEnabled = bool.Parse(_isEnabled);
+                entityType.IsSystem = bool.Parse(_isSystem);
+
+                if (_entityTypeId != -1)
+                {
+                    await EntityTypeService.UpdateEntityTypeAsync(entityType);
+                    await logger.LogInformation("Entity Type Updated {EntityType}", entityType);
+                }
+                else
+                {
+                    entityType = await EntityTypeService.AddEntityTypeAsync(entityType);
+                    await logger.LogInformation("Entity Type Added {EntityType}", entityType);
+                }
+
+                NavigationManager.NavigateTo(NavigateUrl());
+            }
+            catch (Exception ex)
+            {
+                await logger.LogError(ex, "Error Saving Entity Type {Error}", ex.Message);
+                AddModuleMessage(Localizer["Error.SaveEntityType"], MessageType.Error);
+            }
+        }
+        else
+        {
+            AddModuleMessage(Localizer["Message.SaveValidation"], MessageType.Warning);
+        }
+    }
+}

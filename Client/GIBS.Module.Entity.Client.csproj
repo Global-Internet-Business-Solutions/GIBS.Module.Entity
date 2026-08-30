@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Version>1.0.0</Version>
+    <Version>1.0.5</Version>
     <Authors>GIBS</Authors>
     <Company>GIBS</Company>
     <Description>User defined entity definitions, grouped fields, typed values, searchable, filterable metadata, and entity specific templates.</Description>
@@ -26,6 +26,30 @@
   <ItemGroup>
     <Reference Include="Oqtane.Client"><HintPath>..\..\oqtane.framework\Oqtane.Server\bin\Debug\net10.0\Oqtane.Client.dll</HintPath></Reference>
     <Reference Include="Oqtane.Shared"><HintPath>..\..\oqtane.framework\Oqtane.Server\bin\Debug\net10.0\Oqtane.Shared.dll</HintPath></Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Resources\GIBS.Module.Entity\TemplatesEdit.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>TemplatesEdit.resx</DependentUpon>
+    </Compile>
+    <Compile Update="Resources\GIBS.Module.Entity\TemplatesIndex.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>TemplatesIndex.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Resources\GIBS.Module.Entity\TemplatesEdit.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>TemplatesEdit.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <EmbeddedResource Update="Resources\GIBS.Module.Entity\TemplatesIndex.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>TemplatesIndex.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
   </ItemGroup>
 
   <PropertyGroup>

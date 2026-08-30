@@ -1,0 +1,414 @@
+@using Oqtane.Modules.Controls
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+@using GIBS.Module.Entity.Enums
+@using GIBS.Module.Entity.Helpers
+
+@namespace GIBS.Module.Entity
+@inherits ModuleBase
+@inject NavigationManager NavigationManager
+@inject IEntityFieldService EntityFieldService
+@inject IEntityFieldGroupService EntityFieldGroupService
+@inject IEntityTypeService EntityTypeService
+@inject IStringLocalizer<FieldsEdit> Localizer
+
+<form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
+    <div class="container">
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="name" HelpText="Internal name of the field" ResourceKey="Name">Name:</Label>
+            <div class="col-sm-9">
+                <input id="name" class="form-control" @bind="@_name" maxlength="100" required />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="key" HelpText="Unique stable key for this field" ResourceKey="Key">Key:</Label>
+            <div class="col-sm-9">
+                <input id="key" class="form-control" @bind="@_key" maxlength="100" required />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="label" HelpText="Display label for the field" ResourceKey="Label">Label:</Label>
+            <div class="col-sm-9">
+                <input id="label" class="form-control" @bind="@_label" maxlength="200" required />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="description" HelpText="Description of the field" ResourceKey="Description">Description:</Label>
+            <div class="col-sm-9">
+                <textarea id="description" class="form-control" @bind="@_description" rows="2"></textarea>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="datatype" HelpText="Data type for storage" ResourceKey="DataType">Data Type:</Label>
+            <div class="col-sm-9">
+                <select id="datatype" class="form-select" @bind="@_dataType" required>
+                    @foreach (var dt in Enum.GetValues<EntityDataType>())
+                    {
+                        <option value="@dt">@dt</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="editortype" HelpText="UI editor type" ResourceKey="EditorType">Editor Type:</Label>
+            <div class="col-sm-9">
+                <select id="editortype" class="form-select" @bind="@_editorType" required>
+                    @foreach (var et in Enum.GetValues<EntityEditorType>())
+                    {
+                        <option value="@et">@et</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="fieldgroupid" HelpText="Optional field group" ResourceKey="FieldGroup">Field Group:</Label>
+            <div class="col-sm-9">
+                <select id="fieldgroupid" class="form-select" @bind="@_fieldGroupId">
+                    <option value="">@Localizer["None"]</option>
+                    @foreach (var group in _fieldGroups)
+                    {
+                        <option value="@group.FieldGroupId">@group.Name</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="defaultvalue" HelpText="Default value for the field" ResourceKey="DefaultValue">Default Value:</Label>
+            <div class="col-sm-9">
+                <input id="defaultvalue" class="form-control" @bind="@_defaultValue" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="placeholder" HelpText="Placeholder text" ResourceKey="Placeholder">Placeholder:</Label>
+            <div class="col-sm-9">
+                <input id="placeholder" class="form-control" @bind="@_placeholder" maxlength="200" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="helptext" HelpText="Help text for users" ResourceKey="HelpText">Help Text:</Label>
+            <div class="col-sm-9">
+                <input id="helptext" class="form-control" @bind="@_helpText" />
+            </div>
+        </div>
+        @if (_editorType == EntityEditorType.HtmlEditor.ToString())
+        {
+            <div class="row mb-1 align-items-center">
+                <Label Class="col-sm-3" For="htmlcontent" HelpText="HTML content displayed when Editor Type is HtmlEditor" ResourceKey="HtmlContent">HTML Content:</Label>
+                <div class="col-sm-9">
+                    <RichTextEditor @ref="_richTextEditor" Content="@_htmlContent" />
+                </div>
+            </div>
+        }
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="maxlength" HelpText="Maximum length (for strings)" ResourceKey="MaxLength">Max Length:</Label>
+            <div class="col-sm-9">
+                <input id="maxlength" type="number" class="form-control" @bind="@_maxLength" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="sortorder" HelpText="Display order" ResourceKey="SortOrder">Sort Order:</Label>
+            <div class="col-sm-9">
+                <input id="sortorder" type="number" class="form-control" @bind="@_sortOrder" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="isrequired" HelpText="Is this field required?" ResourceKey="Required">Required?</Label>
+            <div class="col-sm-9">
+                <select id="isrequired" class="form-select" @bind="@_isRequired">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="isreadonly" HelpText="Is this field read-only?" ResourceKey="ReadOnly">Read Only?</Label>
+            <div class="col-sm-9">
+                <select id="isreadonly" class="form-select" @bind="@_isReadOnly">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="isfeatured" HelpText="Highlight this field in featured views" ResourceKey="Featured">Featured?</Label>
+            <div class="col-sm-9">
+                <select id="isfeatured" class="form-select" @bind="@_isFeatured">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="islisted" HelpText="Include this field in list/grid displays" ResourceKey="Listed">Listed?</Label>
+            <div class="col-sm-9">
+                <select id="islisted" class="form-select" @bind="@_isListed">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="ismanageronly" HelpText="Restrict this field to manager/admin contexts" ResourceKey="ManagerOnly">Manager?</Label>
+            <div class="col-sm-9">
+                <select id="ismanageronly" class="form-select" @bind="@_isManagerOnly">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="iscaptionhidden" HelpText="Hide the field caption/label" ResourceKey="CaptionHidden">Caption Hidden?</Label>
+            <div class="col-sm-9">
+                <select id="iscaptionhidden" class="form-select" @bind="@_isCaptionHidden">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="ishidden" HelpText="Hide this field in rendered UI" ResourceKey="Hidden">Hidden?</Label>
+            <div class="col-sm-9">
+                <select id="ishidden" class="form-select" @bind="@_isHidden">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="islockeddown" HelpText="Prevent editing except by system processes" ResourceKey="LockedDown">LockedDown?</Label>
+            <div class="col-sm-9">
+                <select id="islockeddown" class="form-select" @bind="@_isLockedDown">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="issortable" HelpText="Allow this field to be used in sorting" ResourceKey="Sortable">Sortable?</Label>
+            <div class="col-sm-9">
+                <select id="issortable" class="form-select" @bind="@_isSortable">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="isenabled" HelpText="Is this field enabled?" ResourceKey="Enabled">Enabled?</Label>
+            <div class="col-sm-9">
+                <select id="isenabled" class="form-select" @bind="@_isEnabled">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <br /><br />
+        <button type="button" class="btn btn-success" @onclick="SaveField">@Localizer["Save"]</button>
+        <NavLink class="btn btn-secondary" href="@NavigateUrl("FieldsIndex", $"entitytypeid={_entityTypeId}")">@Localizer["Cancel"]</NavLink>
+        @if (_fieldId != -1 && _showOptionsLink)
+        {
+            <br /><br />
+            <ActionLink Action="FieldOptionsIndex" Parameters="@($"fieldid={_fieldId}")" Text="Manage Options" Class="btn btn-primary" ResourceKey="ManageOptions" />
+        }
+        <br /><br />
+        <AuditInfo CreatedBy="@_createdBy" CreatedOn="@_createdOn" ModifiedBy="@_modifiedBy" ModifiedOn="@_modifiedOn"></AuditInfo>
+    </div>
+</form>
+
+@code {
+
+    public override string RenderMode => RenderModes.Interactive; 
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
+    
+    private ElementReference form;
+    private bool validated = false;
+
+    private int _fieldId = -1;
+    private int _entityTypeId;
+    private string _name = string.Empty;
+    private string _key = string.Empty;
+    private string _label = string.Empty;
+    private string _description = string.Empty;
+    private string _dataType = EntityDataType.String.ToString();
+    private string _editorType = EntityEditorType.TextBox.ToString();
+    private string _fieldGroupId = string.Empty;
+    private string _defaultValue = string.Empty;
+    private string _placeholder = string.Empty;
+    private string _helpText = string.Empty;
+    private string _htmlContent = string.Empty;
+    private int? _maxLength;
+    private int _sortOrder = 0;
+    private string _isRequired = "False";
+    private string _isReadOnly = "False";
+    private string _isFeatured = "False";
+    private string _isListed = "False";
+    private string _isManagerOnly = "False";
+    private string _isCaptionHidden = "False";
+    private string _isHidden = "False";
+    private string _isLockedDown = "False";
+    private string _isSortable = "False";
+    private string _isEnabled = "True";
+    private RichTextEditor _richTextEditor;
+    private string _createdBy;
+    private DateTime _createdOn;
+    private string _modifiedBy;
+    private DateTime _modifiedOn;
+    private bool _showOptionsLink = false;
+
+    private List<EntityFieldGroup> _fieldGroups = new();
+
+   
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Use helper to safely get entitytypeid with validation
+            if (!QueryStringHelper.TryGetInt(PageState.QueryString, "entitytypeid", out _entityTypeId) || _entityTypeId <= 0)
+            {
+                AddModuleMessage(Localizer["Error.MissingEntityType"], MessageType.Error);
+                return;
+            }
+
+            _fieldGroups = await EntityFieldGroupService.GetFieldGroupsAsync(_entityTypeId, ModuleState.ModuleId);
+
+            // Use helper to safely get the field id if editing
+            if (QueryStringHelper.TryGetInt(PageState.QueryString, "id", out _fieldId) && _fieldId > 0)
+            {
+                var field = await EntityFieldService.GetFieldAsync(_fieldId, ModuleState.ModuleId);
+                if (field != null)
+                {
+                    _name = field.Name;
+                    _key = field.Key;
+                    _label = field.Label;
+                    _description = field.Description ?? string.Empty;
+                    _dataType = field.DataType.ToString();
+                    _editorType = field.EditorType.ToString();
+                    _fieldGroupId = field.FieldGroupId?.ToString() ?? string.Empty;
+                    _defaultValue = field.DefaultValue ?? string.Empty;
+                    _placeholder = field.Placeholder ?? string.Empty;
+                    _helpText = field.HelpText ?? string.Empty;
+                    _htmlContent = field.HtmlContent ?? string.Empty;
+                    _maxLength = field.MaxLength;
+                    _sortOrder = field.SortOrder;
+                    _isRequired = field.IsRequired.ToString();
+                    _isReadOnly = field.IsReadOnly.ToString();
+                    _isFeatured = field.IsFeatured.ToString();
+                    _isListed = field.IsListed.ToString();
+                    _isManagerOnly = field.IsManagerOnly.ToString();
+                    _isCaptionHidden = field.IsCaptionHidden.ToString();
+                    _isHidden = field.IsHidden.ToString();
+                    _isLockedDown = field.IsLockedDown.ToString();
+                    _isSortable = field.IsSortable.ToString();
+                    _isEnabled = field.IsEnabled.ToString();
+                    _createdBy = field.CreatedBy;
+                    _createdOn = field.CreatedOn;
+                    _modifiedBy = field.ModifiedBy;
+                    _modifiedOn = field.ModifiedOn;
+
+                    // Show options link for select-style editors
+                    _showOptionsLink = field.EditorType == EntityEditorType.Dropdown ||
+                                     field.EditorType == EntityEditorType.RadioList ||
+                                     field.EditorType == EntityEditorType.CheckboxList ||
+                                     field.EditorType == EntityEditorType.MultiSelect;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Field {FieldId} {Error}", _fieldId, ex.Message);
+            AddModuleMessage(Localizer["Error.LoadField"], MessageType.Error);
+        }
+    }
+
+    private async Task SaveField()
+    {
+        validated = true;
+        var interop = new Oqtane.UI.Interop(JSRuntime);
+        if (await interop.FormValid(form))
+        {
+            try
+            {
+                // Validate entityTypeId before proceeding
+                if (_entityTypeId <= 0)
+                {
+                    AddModuleMessage(Localizer["Error.MissingEntityType"], MessageType.Error);
+                    return;
+                }
+
+                EntityField field;
+                if (_fieldId > 0)
+                {
+                    field = await EntityFieldService.GetFieldAsync(_fieldId, ModuleState.ModuleId);
+
+                    // Check if field was found
+                    if (field == null)
+                    {
+                        AddModuleMessage(Localizer["Error.FieldNotFound"], MessageType.Error);
+                        return;
+                    }
+                }
+                else
+                {
+                    field = new EntityField
+                    {
+                        EntityTypeId = _entityTypeId
+                    };
+                }
+
+                var selectedEditorType = Enum.Parse<EntityEditorType>(_editorType);
+                var htmlContent = _htmlContent;
+                if (selectedEditorType == EntityEditorType.HtmlEditor && _richTextEditor != null)
+                {
+                    htmlContent = await _richTextEditor.GetHtml();
+                    _htmlContent = htmlContent ?? string.Empty;
+                }
+
+                field.Name = _name;
+                field.Key = _key;
+                field.Label = _label;
+                field.Description = _description;
+                field.DataType = Enum.Parse<EntityDataType>(_dataType);
+                field.EditorType = selectedEditorType;
+                field.FieldGroupId = string.IsNullOrEmpty(_fieldGroupId) ? null : int.Parse(_fieldGroupId);
+                field.DefaultValue = _defaultValue;
+                field.Placeholder = _placeholder;
+                field.HelpText = _helpText;
+                field.HtmlContent = htmlContent;
+                field.MaxLength = _maxLength;
+                field.SortOrder = _sortOrder;
+                field.IsRequired = bool.Parse(_isRequired);
+                field.IsReadOnly = bool.Parse(_isReadOnly);
+                field.IsFeatured = bool.Parse(_isFeatured);
+                field.IsListed = bool.Parse(_isListed);
+                field.IsManagerOnly = bool.Parse(_isManagerOnly);
+                field.IsCaptionHidden = bool.Parse(_isCaptionHidden);
+                field.IsHidden = bool.Parse(_isHidden);
+                field.IsLockedDown = bool.Parse(_isLockedDown);
+                field.IsSortable = bool.Parse(_isSortable);
+                field.IsEnabled = bool.Parse(_isEnabled);
+
+                if (_fieldId > 0)
+                {
+                    await EntityFieldService.UpdateFieldAsync(field);
+                    await logger.LogInformation("Field Updated {Field}", field);
+                }
+                else
+                {
+                    field = await EntityFieldService.AddFieldAsync(field);
+                    await logger.LogInformation("Field Added {Field}", field);
+                }
+
+                NavigationManager.NavigateTo(NavigateUrl(ModuleState.ModuleId, "FieldsIndex", $"entitytypeid={_entityTypeId}"));
+            }
+            catch (Exception ex)
+            {
+                await logger.LogError(ex, "Error Saving Field {Error}", ex.Message);
+                AddModuleMessage(Localizer["Error.SaveField"], MessageType.Error);
+            }
+        }
+        else
+        {
+            AddModuleMessage(Localizer["Message.SaveValidation"], MessageType.Warning);
+        }
+    }
+}

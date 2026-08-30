@@ -71,7 +71,7 @@ namespace GIBS.Module.Entity.Manager
                {
                    searchContentList.Add(new SearchContent
                    {
-                       EntityName = "GIBSEntity",
+                       EntityName = "GIBS_Entity",
                        EntityId = Entity.EntityId.ToString(),
                        Title = Entity.Name,
                        Body = Entity.Name,
