@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Linq;
 using Oqtane.Services;
 using GIBS.Module.Entity.Services;
+using GIBS.Module.Entity.Interfaces;
 
 namespace GIBS.Module.Entity.Startup
 {
@@ -36,6 +37,13 @@ namespace GIBS.Module.Entity.Startup
             {
                 services.AddScoped<IEntityFieldOptionService, ClientEntityFieldOptionService>();
             }
+
+            // Phase 2: Entity Value services
+            if (!services.Any(s => s.ServiceType == typeof(IEntityValueService)))
+            {
+                services.AddScoped<IEntityValueService, ClientEntityValueService>();
+            }
         }
     }
 }
+

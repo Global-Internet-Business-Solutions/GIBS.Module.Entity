@@ -13,33 +13,38 @@
 }
 else
 {
-    <NavLink class="btn btn-secondary" href="@NavigateUrl()">    
+    
+    <div class="d-flex justify-content-between mb-3">
+        <NavLink class="btn btn-secondary" href="@NavigateUrl(@ModuleState.ModuleId, "BackOffice")">    
         <i class="oi oi-arrow-left"></i> @Localizer["Back"]
-    </NavLink>
-    <ActionLink Action="EntityTypesEdit" Security="SecurityAccessLevel.Edit" Text="Add Entity Type" ResourceKey="Add" Class="btn btn-success" />
-    <br /><br />
+        </NavLink>
+        <ActionLink Action="EntityTypesEdit" Security="SecurityAccessLevel.Edit" Text="Add Entity Type" ResourceKey="Add" Class="btn btn-success" />
+    </div>
+
+
+
+    
     @if (_entityTypes.Any())
     {
-        <Pager Items="@_entityTypes">
-            <Header>
-                <th style="width: 1px;">&nbsp;</th>
-                <th style="width: 1px;">&nbsp;</th>
-                <th>@Localizer["Name"]</th>
-                <th>@Localizer["Key"]</th>
-                <th>@Localizer["Description"]</th>
-                <th style="width: 1px;">@Localizer["Enabled"]</th>
-                <th style="width: 1px;">@Localizer["System"]</th>
-            </Header>
-            <Row>
-                <td><ActionLink Action="EntityTypesEdit" Parameters="@($"id={context.EntityTypeId}")" ResourceKey="Edit" /></td>
-                <td><ActionDialog Header="Delete Entity Type" Message="Are You Sure You Wish To Delete This Entity Type?" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete" Id="@context.EntityTypeId.ToString()" /></td>
-                <td>@context.Name</td>
-                <td>@context.Key</td>
-                <td>@context.Description</td>
-                <td>@(context.IsEnabled ? Localizer["Yes"] : Localizer["No"])</td>
-                <td>@(context.IsSystem ? Localizer["Yes"] : Localizer["No"])</td>
-            </Row>
-        </Pager>
+        <table class="table table-borderless">
+            <thead>
+                <tr>
+                    <th style="width: 1px;">&nbsp;</th>
+                    <th style="width: 1px;">&nbsp;</th>
+                    <th>@Localizer["Name"]</th>
+                    <th>@Localizer["Key"]</th>
+                    <th>@Localizer["Description"]</th>
+                    <th>@Localizer["EntityTypeId"]</th>
+                    <th>@Localizer["ParentId"]</th>
+                    <th>@Localizer["SortOrder"]</th>
+                    <th style="width: 1px;">@Localizer["Enabled"]</th>
+                    <th style="width: 1px;">@Localizer["System"]</th>
+                </tr>
+            </thead>
+            <tbody>
+                @RenderTree(_entityTypes, 0)
+            </tbody>
+        </table>
     }
     else
     {
@@ -49,7 +54,8 @@ else
 
 @code {
     public override string RenderMode => RenderModes.Static;
-    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.View;
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
+    public override bool UseAdminContainer => false;
 
     private List<EntityType> _entityTypes;
 
@@ -57,7 +63,8 @@ else
     {
         try
         {
-            _entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+            var flatList = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+            _entityTypes = BuildTree(flatList);
         }
         catch (Exception ex)
         {
@@ -72,7 +79,8 @@ else
         {
             await EntityTypeService.DeleteEntityTypeAsync(entityType.EntityTypeId, ModuleState.ModuleId);
             await logger.LogInformation("Entity Type Deleted {EntityType}", entityType);
-            _entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+            var flatList = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+            _entityTypes = BuildTree(flatList);
             StateHasChanged();
         }
         catch (Exception ex)
@@ -81,4 +89,65 @@ else
             AddModuleMessage(Localizer["Message.DeleteError"], MessageType.Error);
         }
     }
+
+    private List<EntityType> BuildTree(List<EntityType> flatList)
+    {
+        foreach (var item in flatList)
+        {
+            item.Children = new List<EntityType>();
+        }
+
+        var lookup = flatList.ToDictionary(x => x.EntityTypeId);
+        var rootItems = new List<EntityType>();
+
+        foreach (var item in flatList)
+        {
+            if (item.ParentEntityTypeId == null || !lookup.ContainsKey(item.ParentEntityTypeId.Value))
+            {
+                rootItems.Add(item);
+            }
+            else
+            {
+                lookup[item.ParentEntityTypeId.Value].Children.Add(item);
+            }
+        }
+
+        SortTree(rootItems);
+        return rootItems;
+    }
+
+    private void SortTree(List<EntityType> items)
+    {
+        items.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
+        foreach (var item in items)
+        {
+            if (item.Children != null && item.Children.Count > 0)
+            {
+                SortTree(item.Children);
+            }
+        }
+    }
+
+    private RenderFragment RenderTree(IEnumerable<EntityType> items, int level) => __builder =>
+    {
+        foreach (var context in items)
+        {
+            <tr>
+                <td><ActionLink Action="EntityTypesEdit" Text="@Localizer["EntityTypesEdit"]" Parameters="@($"id={context.EntityTypeId}")" ResourceKey="EntityTypesEdit" /></td>
+                <td><ActionDialog Header="Delete Entity Type" Message="Are You Sure You Wish To Delete This Entity Type?" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete" Id="@context.EntityTypeId.ToString()" /></td>
+                <td style="padding-left:@(level * 20)px">@context.Name</td>
+                <td>@context.Key</td>
+                <td>@context.Description</td>
+                <td>@context.EntityTypeId</td>
+                <td>@context.ParentEntityTypeId</td>
+                <td>@context.SortOrder</td>
+                <td>@(context.IsEnabled ? Localizer["Yes"] : Localizer["No"])</td>
+                <td>@(context.IsSystem ? Localizer["Yes"] : Localizer["No"])</td>
+            </tr>
+            if (context.Children != null && context.Children.Count > 0)
+            {
+                @RenderTree(context.Children, level + 1)
+            }
+        }
+    };
 }

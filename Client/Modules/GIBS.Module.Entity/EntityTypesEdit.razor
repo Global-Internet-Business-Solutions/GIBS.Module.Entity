@@ -10,6 +10,8 @@
 
 <form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
     <div class="container">
+        <h4>@_mode @Localizer["EntityTypesMode"]</h4>
+
         <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="name" HelpText="Name Of The Entity Type" ResourceKey="Name">Name:</Label>
             <div class="col-sm-9">
@@ -67,14 +69,14 @@
         <hr />
         <br /><br />
         <button type="button" class="btn btn-success" @onclick="SaveEntityType">@Localizer["Save"]</button>
-        <NavLink class="btn btn-secondary" href="@NavigateUrl()">@Localizer["Cancel"]</NavLink>
+        <NavLink class="btn btn-secondary" href="@NavigateUrl(@ModuleState.ModuleId, "EntityTypesIndex")">@Localizer["Cancel"]</NavLink>
         @if (_entityTypeId != -1)
         {
             <br /><br />
             <div class="btn-group" role="group">
-                <ActionLink Action="FieldsIndex" Parameters="@($"entitytypeid={_entityTypeId}")" Text="Manage Fields" Class="btn btn-primary" ResourceKey="ManageFields" />
-                <ActionLink Action="FieldGroupsIndex" Parameters="@($"entitytypeid={_entityTypeId}")" Text="Manage Field Groups" Class="btn btn-warning" ResourceKey="ManageFieldGroups" />
-                <ActionLink Action="TemplatesIndex" Text="Manage Templates" Class="btn btn-secondary" ResourceKey="ManageTemplates" />
+                <ActionLink Action="FieldsIndex" Parameters="@($"entitytypeid={_entityTypeId}")" Text="@Localizer["ManageFields"]" Class="btn btn-primary" ResourceKey="ManageFields" />
+                <ActionLink Action="FieldGroupsIndex" Parameters="@($"entitytypeid={_entityTypeId}")" Text="@Localizer["ManageFieldGroups"]" Class="btn btn-warning" ResourceKey="ManageFieldGroups" />
+                <ActionLink Action="TemplatesIndex" Text="@Localizer["ManageTemplates"]" Class="btn btn-secondary" ResourceKey="ManageTemplates" />
             </div>
         }
         <br /><br />
@@ -102,7 +104,7 @@
     private DateTime _createdOn;
     private string _modifiedBy;
     private DateTime _modifiedOn;
-
+    private string _mode => _entityTypeId == -1 ? Localizer["Add"] : Localizer["Edit"];
     private List<EntityType> _availableEntityTypes = new();
 
 

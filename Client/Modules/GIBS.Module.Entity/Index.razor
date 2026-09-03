@@ -1,10 +1,28 @@
+@using GIBS.Module.Entity.Services
+@using GIBS.Module.Entity.Models
+@using GIBS.Module.Entity.Helpers
+
 @namespace GIBS.Module.Entity
 @inherits ModuleBase
+@inject IEntityTypeService EntityTypeService
+@inject IEntityFieldService EntityFieldService
+@inject IEntityFieldGroupService EntityFieldGroupService
+@inject IEntityFieldOptionService EntityFieldOptionService
+@inject IEntityService EntityService
+@inject IEntityTemplateService EntityTemplateService
+@inject IEntityValueService EntityValueService
+@inject NavigationManager NavigationManager
+@inject IStringLocalizer<Index> Localizer
+@inject ISettingService SettingService
 
 <div class="container">
     <div class="row mb-3">
         <div class="col">
-            <h3>Entity Management</h3>
+           @if(!string.IsNullOrEmpty(_customTitle))
+            {
+                <h3>@_customTitle</h3>
+            }
+           
         </div>
     </div>
     <div class="row mb-3">
@@ -19,9 +37,221 @@
 
     <div class="row mb-3 align-items-center">
         <div class="col-md-9">
+            @if (_enableFeatured && _featuredRecords != null && _featuredRecords.Any())
+            {
+                <div class="featured-section">
+                    @if (!string.IsNullOrEmpty(_featuredTemplate?.Header))
+                    {
+                        @((MarkupString)_featuredTemplate.Header)
+                    }
+
+                    <div class="featured-content">
+                        @{
+                            int count = 0;
+                            @* DEBUG OUTPUT *@
+                            <!-- Featured Records Count: @_featuredRecords.Count -->
+                            <!-- Template Type: @_featuredTemplate?.TemplateType -->
+                            <!-- Template Item: @_featuredTemplate?.Item -->
+                            <!-- Template Alternate: @_featuredTemplate?.Alternate -->
+
+                            foreach (var record in _featuredRecords)
+                            {
+                                // Alternate between Item and Alternate templates based on index
+                                var templateContent = (count % 2 == 0)
+                                    ? _featuredTemplate?.Item
+                                    : _featuredTemplate?.Alternate ?? _featuredTemplate?.Item;
+
+                                if (!string.IsNullOrEmpty(templateContent))
+                                {
+                                    // Get EntityValue data for this record
+                                    var entityValues = _entityValuesMap.ContainsKey(record.EntityId) 
+                                        ? _entityValuesMap[record.EntityId] 
+                                        : new List<EntityValue>();
+
+                                    // Render template with EntityValue data
+                                    var rendered = TemplateEngine.Render(templateContent, record, _entityFields, entityValues);
+                                    <!-- Entity: @record.EntityId | Count: @count | Template: @(count % 2 == 0 ? "Item" : "Alternate") -->
+                                    <div class="featured-item" data-entity-id="@record.EntityId" data-count="@count">@((MarkupString)rendered)</div>
+                                }
+
+                                if (!string.IsNullOrEmpty(_featuredTemplate?.Separator) && count < _featuredRecords.Count - 1)
+                                {
+                                    <div class="featured-separator">@((MarkupString)_featuredTemplate.Separator)</div>
+                                }
+
+                                count++;
+                            }
+                        }
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(_featuredTemplate?.Footer))
+                    {
+                        @((MarkupString)_featuredTemplate.Footer)
+                    }
+                </div>
+            }
         </div>
         <div class="col-md-3 text-end">
         </div>
     </div>
 
 </div>
+
+
+@code {
+    public override string RenderMode => RenderModes.Static;
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.View;
+    public override bool UseAdminContainer => false;
+
+    private bool _isLoading = true;
+    private string _customTitle;
+    private bool _enableFeatured;
+    private List<Entity> _featuredRecords = new();
+    private EntityTemplate _featuredTemplate;
+    private List<EntityField> _entityFields = new();
+    private Dictionary<int, List<EntityValue>> _entityValuesMap = new();
+
+    // Cache for featured data - persists across component instances
+    private static readonly Dictionary<string, FeaturedDataCache> _cache = new();
+
+    private class FeaturedDataCache
+    {
+        public List<Entity> FeaturedRecords { get; set; }
+        public EntityTemplate FeaturedTemplate { get; set; }
+        public List<EntityField> EntityFields { get; set; }
+        public Dictionary<int, List<EntityValue>> EntityValuesMap { get; set; }
+    }
+
+    /// <summary>
+    /// Public static method to clear featured cache for a specific module.
+    /// Call this from EntityEdit or other components when featured data changes.
+    /// </summary>
+    public static void ClearFeaturedCache(int moduleId)
+    {
+        string cacheKey = $"FeaturedData_{moduleId}";
+        if (_cache.ContainsKey(cacheKey))
+        {
+            _cache.Remove(cacheKey);
+        }
+    }
+
+    /// <summary>
+    /// Public static method to clear all featured caches.
+    /// Use when you want to force refresh across all modules.
+    /// </summary>
+    public static void ClearAllFeaturedCaches()
+    {
+        _cache.Clear();
+    }
+
+        protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+           _isLoading = true;
+
+            _customTitle = SettingService.GetSetting(ModuleState.Settings, "CustomTitle", "");
+            _enableFeatured = bool.TryParse(SettingService.GetSetting(ModuleState.Settings, "EnableFeatured", "true"), out var enableFeatured) && enableFeatured;
+
+            if (_enableFeatured)
+            {
+                // Use cache key based on ModuleId so each module instance has its own cache
+                string cacheKey = $"FeaturedData_{ModuleState.ModuleId}";
+
+                if (_cache.ContainsKey(cacheKey))
+                {
+                    // Use cached data from previous render
+                    var cached = _cache[cacheKey];
+                    _featuredRecords = cached.FeaturedRecords;
+                    _featuredTemplate = cached.FeaturedTemplate;
+                    _entityFields = cached.EntityFields;
+                    _entityValuesMap = cached.EntityValuesMap;
+                    await logger.LogDebug($"Cache HIT: Loaded {_featuredRecords.Count} featured records from cache");
+                }
+                else
+                {
+                    // First time: load data and cache for Static renders
+                    await LoadFeaturedRecordsAsync();
+                    await logger.LogDebug($"Cache MISS: Loaded {_featuredRecords.Count} featured records from API");
+
+                    // Cache the data so subsequent Static renders use it
+                    _cache[cacheKey] = new FeaturedDataCache
+                    {
+                        FeaturedRecords = new List<Entity>(_featuredRecords),
+                        FeaturedTemplate = _featuredTemplate,
+                        EntityFields = new List<EntityField>(_entityFields),
+                        EntityValuesMap = new Dictionary<int, List<EntityValue>>(_entityValuesMap)
+                    };
+                }
+            }
+
+
+
+
+
+            
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading BackOffice Data {Error}", ex.Message);
+            AddModuleMessage(Localizer["Error.LoadData"], MessageType.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadFeaturedRecordsAsync()
+    {
+        try
+        {
+            // Clear previous data
+            _featuredRecords.Clear();
+            _entityFields.Clear();
+            _entityValuesMap.Clear();
+
+            // Get the Featured template
+            var templates = await EntityTemplateService.GetTemplatesAsync(ModuleState.ModuleId);
+            _featuredTemplate = templates?.FirstOrDefault(t => t.TemplateType == "Featured");
+
+            if (_featuredTemplate == null)
+            {
+                // No featured template configured
+                return;
+            }
+
+            // Get featured entities ordered by SortOrder
+            var entities = await EntityService.GetEntitysAsync(ModuleState.ModuleId);
+            _featuredRecords = entities
+                .Where(e => e.IsFeatured && e.IsEnabled && e.IsPublished)
+                .OrderBy(e => e.SortOrder)
+                .ToList();
+
+            if (_featuredRecords.Any())
+            {
+                // Get all entity fields for the featured entity types
+                var entityTypeIds = _featuredRecords.Select(e => e.EntityTypeId).Distinct();
+                foreach (var typeId in entityTypeIds)
+                {
+                    var fields = await EntityFieldService.GetFieldsAsync(typeId, ModuleState.ModuleId);
+                    _entityFields.AddRange(fields ?? new List<EntityField>());
+                }
+
+                // Remove duplicates
+                _entityFields = _entityFields.GroupBy(f => f.FieldId).Select(g => g.First()).ToList();
+
+                // Load EntityValue data for all featured records
+                foreach (var record in _featuredRecords)
+                {
+                    var entityValues = await EntityValueService.GetAllEntityValuesAsync(record.EntityId);
+                    _entityValuesMap[record.EntityId] = entityValues ?? new List<EntityValue>();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Featured Records {Error}", ex.Message);
+        }
+    }
+}

@@ -15,6 +15,7 @@ namespace GIBS.Module.Entity.Repository
         public virtual DbSet<Models.EntityFieldGroup> EntityFieldGroups { get; set; }
         public virtual DbSet<Models.EntityField> EntityFields { get; set; }
         public virtual DbSet<Models.EntityFieldOption> EntityFieldOptions { get; set; }
+        public virtual DbSet<Models.EntityValue> EntityValues { get; set; }
 
         public EntityContext(IDBContextDependencies DBContextDependencies) : base(DBContextDependencies)
         {
@@ -31,6 +32,26 @@ namespace GIBS.Module.Entity.Repository
             builder.Entity<Models.EntityFieldGroup>().ToTable(ActiveDatabase.RewriteName("GIBS_EntityFieldGroup"));
             builder.Entity<Models.EntityField>().ToTable(ActiveDatabase.RewriteName("GIBS_EntityField"));
             builder.Entity<Models.EntityFieldOption>().ToTable(ActiveDatabase.RewriteName("GIBS_EntityFieldOption"));
+            builder.Entity<Models.EntityValue>().ToTable(ActiveDatabase.RewriteName("GIBS_EntityValue"));
+
+            // Configure EntityValue relationships
+            builder.Entity<Models.EntityValue>()
+                .HasOne(ev => ev.Entity)
+                .WithMany(e => e.Values)
+                .HasForeignKey(ev => ev.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<Models.EntityValue>()
+                .HasOne(ev => ev.EntityField)
+                .WithMany()
+                .HasForeignKey(ev => ev.FieldId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<Models.EntityValue>()
+                .HasOne(ev => ev.ReferencedEntity)
+                .WithMany()
+                .HasForeignKey(ev => ev.ReferencedEntityId)
+                .OnDelete(DeleteBehavior.NoAction);
         }
     }
 }

@@ -21,7 +21,10 @@
                <NavLink class="btn btn-secondary" href="@NavigateUrl()">
                    <i class="oi oi-arrow-left"></i> @Localizer["BackToEntities"]
                </NavLink>
+               <div>
+               <ActionLink Action="TemplatesIndex" Class="btn btn-outline-secondary" Text="Templates" Security="SecurityAccessLevel.Edit" ResourceKey="ManageTemplates" />
                <ActionLink Action="Add" Security="SecurityAccessLevel.Edit" Text="Add Entity" Class="btn btn-success" ResourceKey="Add" />
+               </div>
            </div>
         </div>
     </div>
@@ -43,7 +46,7 @@
                     <div class="card-body text-center">
                         <i class="oi oi-list-rich" style="font-size: 2rem; color: var(--bs-primary);"></i>
                         <h3 class="mt-2 mb-0">@_entityTypeCount</h3>
-                        <p class="text-muted mb-0">@Localizer["EntityTypes"]</p>
+                        <p class="text-muted mb-0">@Localizer["CardEntityTypes"]</p>
                     </div>
                 </div>
             </div>
@@ -52,7 +55,7 @@
                     <div class="card-body text-center">
                         <i class="oi oi-document" style="font-size: 2rem; color: var(--bs-success);"></i>
                         <h3 class="mt-2 mb-0">@_fieldCount</h3>
-                        <p class="text-muted mb-0">@Localizer["Fields"]</p>
+                        <p class="text-muted mb-0">@Localizer["CardFields"]</p>
                     </div>
                 </div>
             </div>
@@ -61,7 +64,7 @@
                     <div class="card-body text-center">
                         <i class="oi oi-grid-three-up" style="font-size: 2rem; color: var(--bs-info);"></i>
                         <h3 class="mt-2 mb-0">@_fieldGroupCount</h3>
-                        <p class="text-muted mb-0">@Localizer["FieldGroups"]</p>
+                        <p class="text-muted mb-0">@Localizer["CardFieldGroups"]</p>
                     </div>
                 </div>
             </div>
@@ -70,7 +73,7 @@
                     <div class="card-body text-center">
                         <i class="oi oi-layers" style="font-size: 2rem; color: var(--bs-warning);"></i>
                         <h3 class="mt-2 mb-0">@_entityCount</h3>
-                        <p class="text-muted mb-0">@Localizer["Entities"]</p>
+                        <p class="text-muted mb-0">@Localizer["CardEntities"]</p>
                     </div>
                 </div>
             </div>
@@ -95,7 +98,7 @@
                     <div class="card-footer">
                         <ActionLink Action="EntityTypesIndex" Class="btn btn-primary" Text="@Localizer["Manage"]" Security="SecurityAccessLevel.Edit" ResourceKey="ManageEntityTypes" />
                         <ActionLink Action="EntityTypesEdit" Class="btn btn-outline-primary" Text="@Localizer["AddNew"]" Security="SecurityAccessLevel.Edit" ResourceKey="AddEntityType" />
-                        <ActionLink Action="TemplatesIndex" Class="btn btn-outline-secondary" Text="Templates" Security="SecurityAccessLevel.Edit" ResourceKey="ManageTemplates" />
+                        
                     </div>
                 </div>
             </div>

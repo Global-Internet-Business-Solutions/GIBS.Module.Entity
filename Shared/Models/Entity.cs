@@ -93,8 +93,7 @@ namespace GIBS.Module.Entity.Models
         public ICollection<Entity> ChildEntities { get; set; }
             = new List<Entity>();
 
-        // Phase 2: EntityValue navigation will be added later
-        // public ICollection<EntityValue> Values { get; set; }
-        //     = new List<EntityValue>();
+        public ICollection<EntityValue> Values { get; set; }
+            = new List<EntityValue>();
     }
 }

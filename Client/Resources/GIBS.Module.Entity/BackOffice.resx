@@ -126,13 +126,16 @@
   <data name="BackToEntities" xml:space="preserve">
     <value>Return</value>
   </data>
+  <data name="CardEntities" xml:space="preserve">
+    <value>Entity Records</value>
+  </data>
   <data name="EntityRecordDescription" xml:space="preserve">
-    <value>Entity Record Description</value>
+    <value>Recent Entity Records</value>
   </data>
   <data name="EntityRecords" xml:space="preserve">
     <value>Entity Records</value>
   </data>
-  <data name="EntityTypes" xml:space="preserve">
+  <data name="CardEntityTypes" xml:space="preserve">
     <value>Entity Types</value>
   </data>
   <data name="EntityTypes_Description" xml:space="preserve">
@@ -141,17 +144,20 @@
   <data name="EntityTypes_Title" xml:space="preserve">
     <value>Entity Types</value>
   </data>
-  <data name="FieldGroups" xml:space="preserve">
+  <data name="CardFieldGroups" xml:space="preserve">
     <value>Field Groups</value>
   </data>
   <data name="FieldGroupsDescription" xml:space="preserve">
     <value>Custom Field Groups</value>
   </data>
-  <data name="Fields_Description" xml:space="preserve">
+  <data name="CardFields" xml:space="preserve">
     <value>Custom Fields</value>
   </data>
+  <data name="Fields_Description" xml:space="preserve">
+    <value>Recent Custom Fields</value>
+  </data>
   <data name="Fields_Title" xml:space="preserve">
-    <value>Fields</value>
+    <value>Custom Fields</value>
   </data>
   <data name="SelectEntityType" xml:space="preserve">
     <value>Select Entity Type to Manage:</value>

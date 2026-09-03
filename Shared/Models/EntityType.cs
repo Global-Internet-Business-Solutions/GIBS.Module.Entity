@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Oqtane.Models;
@@ -44,6 +45,12 @@ namespace GIBS.Module.Entity.Models
         public bool IsSystem { get; set; } = false;
 
         public int SortOrder { get; set; }
+
+        /// <summary>
+        /// Child Entity Types used for hierarchical display. Not persisted to the database.
+        /// </summary>
+        [NotMapped]
+        public List<EntityType> Children { get; set; } = new List<EntityType>();
 
         // Template content moved to GIBS_EntityTemplate (module-scoped)
         // to keep EntityType focused on schema metadata.

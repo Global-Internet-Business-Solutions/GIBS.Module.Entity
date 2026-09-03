@@ -90,10 +90,10 @@
                 <input id="helptext" class="form-control" @bind="@_helpText" />
             </div>
         </div>
-        @if (_editorType == EntityEditorType.HtmlEditor.ToString())
+        @if (_editorType == EntityEditorType.HtmlContentDisplay.ToString())
         {
             <div class="row mb-1 align-items-center">
-                <Label Class="col-sm-3" For="htmlcontent" HelpText="HTML content displayed when Editor Type is HtmlEditor" ResourceKey="HtmlContent">HTML Content:</Label>
+                <Label Class="col-sm-3" For="htmlcontent" HelpText="HTML content displayed when Editor Type is HtmlContentDisplay" ResourceKey="HtmlContent">HTML Content:</Label>
                 <div class="col-sm-9">
                     <RichTextEditor @ref="_richTextEditor" Content="@_htmlContent" />
                 </div>
@@ -193,6 +193,15 @@
             </div>
         </div>
         <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="ismultivalue" HelpText="Support multiple values for this field (e.g., multiple images)" ResourceKey="MultiValue">Multi-Value?</Label>
+            <div class="col-sm-9">
+                <select id="ismultivalue" class="form-select" @bind="@_isMultiValue">
+                    <option value="True">@Localizer["Yes"]</option>
+                    <option value="False">@Localizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="isenabled" HelpText="Is this field enabled?" ResourceKey="Enabled">Enabled?</Label>
             <div class="col-sm-9">
                 <select id="isenabled" class="form-select" @bind="@_isEnabled">
@@ -247,6 +256,7 @@
     private string _isLockedDown = "False";
     private string _isSortable = "False";
     private string _isEnabled = "True";
+    private string _isMultiValue = "False";
     private RichTextEditor _richTextEditor;
     private string _createdBy;
     private DateTime _createdOn;
@@ -300,6 +310,7 @@
                     _isLockedDown = field.IsLockedDown.ToString();
                     _isSortable = field.IsSortable.ToString();
                     _isEnabled = field.IsEnabled.ToString();
+                    _isMultiValue = field.IsMultiValue.ToString();
                     _createdBy = field.CreatedBy;
                     _createdOn = field.CreatedOn;
                     _modifiedBy = field.ModifiedBy;
@@ -357,7 +368,7 @@
 
                 var selectedEditorType = Enum.Parse<EntityEditorType>(_editorType);
                 var htmlContent = _htmlContent;
-                if (selectedEditorType == EntityEditorType.HtmlEditor && _richTextEditor != null)
+                if ((selectedEditorType == EntityEditorType.HtmlEditor || selectedEditorType == EntityEditorType.HtmlContentDisplay) && _richTextEditor != null)
                 {
                     htmlContent = await _richTextEditor.GetHtml();
                     _htmlContent = htmlContent ?? string.Empty;
@@ -386,6 +397,7 @@
                 field.IsLockedDown = bool.Parse(_isLockedDown);
                 field.IsSortable = bool.Parse(_isSortable);
                 field.IsEnabled = bool.Parse(_isEnabled);
+                field.IsMultiValue = bool.Parse(_isMultiValue);
 
                 if (_fieldId > 0)
                 {

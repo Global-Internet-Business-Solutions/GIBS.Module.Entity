@@ -6,6 +6,7 @@
 @inherits ModuleBase
 @inject IEntityService ClientEntityService
 @inject IEntityFieldService EntityFieldService
+@inject IEntityValueService EntityValueService
 @inject NavigationManager NavigationManager
 @inject IStringLocalizer<EntityList> Localizer
 
@@ -36,24 +37,25 @@ else
                 <th style="width: 1px;">&nbsp;</th>
                 <th>@Localizer["Name"]</th>
                 <th>@Localizer["Type"]</th>
-                <th>@Localizer["Status"]</th>
                 @foreach (var field in _managerFields)
                 {
                     <th>@GetFieldDisplayName(field)</th>
                 }
+                <th>@Localizer["Status"]</th>
                 <th>@Localizer["IsEnabled"]</th>
                 <th>@Localizer["SortOrder"]</th>
             </Header>
             <Row>
-                <td><ActionLink Action="Edit" Parameters="@($"id={context.EntityId}")" ResourceKey="Edit" /></td>
-                <td><ActionDialog Header="Delete Entity" Message="Are You Sure You Wish To Delete This Entity?" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete" Id="@context.EntityId.ToString()" /></td>
+                <td><ActionLink Action="Edit" Parameters="@($"id={context.EntityId}")" IconName="oi oi-pencil" IconOnly="true" ResourceKey="Edit" /></td>
+                <td><ActionDialog Header="Delete Entity" Message="Are You Sure You Wish To Delete This Entity?" IconName="oi oi-trash" IconOnly="true" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete" Id="@context.EntityId.ToString()" /></td>
                 <td>@context.Name</td>
                 <td>@context.EntityType?.Name</td>
-                <td>@context.Status</td>
+               
                 @foreach (var field in _managerFields)
                 {
                     <td>@GetManagerFieldValue(context, field.FieldId)</td>
                 }
+                 <td>@context.Status</td>
                 <td>@context.IsEnabled</td>
                 <td>@context.SortOrder</td>
             </Row>
@@ -124,7 +126,13 @@ else
             .ThenBy(f => f.Name)
             .ToList();
 
-        _entityCustomValues = _Entitys.ToDictionary(e => e.EntityId, e => ParseCustomFieldValues(e.Settings));
+        // Load custom field values from EntityValue table instead of Settings
+        _entityCustomValues = new Dictionary<int, Dictionary<int, string>>();
+        foreach (var entity in _Entitys)
+        {
+            var customValues = await LoadEntityCustomValuesAsync(entity.EntityId);
+            _entityCustomValues[entity.EntityId] = customValues;
+        }
     }
 
     private Dictionary<int, string> ParseCustomFieldValues(string settings)
@@ -142,6 +150,118 @@ else
         {
             return new Dictionary<int, string>();
         }
+    }
+
+    /// <summary>
+    /// Load custom field values from EntityValue table for a specific entity
+    /// </summary>
+    private async Task<Dictionary<int, string>> LoadEntityCustomValuesAsync(int entityId)
+    {
+        var customValues = new Dictionary<int, string>();
+
+        try
+        {
+            var allValues = await EntityValueService.GetAllEntityValuesAsync(entityId);
+
+            // Group values by FieldId and extract string value
+            foreach (var fieldGroup in allValues.GroupBy(ev => ev.FieldId))
+            {
+                var fieldId = fieldGroup.Key;
+                var values = fieldGroup.OrderBy(v => v.ValueIndex).ToList();
+
+                if (values.Any())
+                {
+                    // Check if this is a multi-value field by seeing if there are multiple rows with same FieldId
+                    if (values.Count > 1)
+                    {
+                        // For multi-value fields, combine all values into JSON array format
+                        var multiValueItems = new List<string>();
+                        foreach (var value in values)
+                        {
+                            if (!string.IsNullOrEmpty(value.TextValue))
+                            {
+                                multiValueItems.Add(value.TextValue);
+                            }
+                            else if (value.IntegerValue.HasValue)
+                            {
+                                multiValueItems.Add(value.IntegerValue.ToString());
+                            }
+                            else if (value.BooleanValue.HasValue)
+                            {
+                                multiValueItems.Add(value.BooleanValue.ToString());
+                            }
+                            else if (value.DateValue.HasValue)
+                            {
+                                multiValueItems.Add(value.DateValue.Value.ToString("yyyy-MM-dd"));
+                            }
+                            else if (value.DateTimeValue.HasValue)
+                            {
+                                multiValueItems.Add(value.DateTimeValue.Value.ToString("yyyy-MM-dd HH:mm"));
+                            }
+                            else if (value.DecimalValue.HasValue)
+                            {
+                                multiValueItems.Add(value.DecimalValue.ToString());
+                            }
+                            else if (value.GuidValue.HasValue)
+                            {
+                                multiValueItems.Add(value.GuidValue.ToString());
+                            }
+                            else if (value.ReferencedEntityId.HasValue)
+                            {
+                                multiValueItems.Add(value.ReferencedEntityId.ToString());
+                            }
+                        }
+                        customValues[fieldId] = string.Join(", ", multiValueItems);
+                    }
+                    else
+                    {
+                        // For single-value fields, use the first (only) value
+                        var firstValue = values.First();
+
+                        if (firstValue.BooleanValue.HasValue)
+                        {
+                            customValues[fieldId] = firstValue.BooleanValue.ToString();
+                        }
+                        else if (!string.IsNullOrEmpty(firstValue.TextValue))
+                        {
+                            customValues[fieldId] = firstValue.TextValue;
+                        }
+                        else if (firstValue.DateValue.HasValue)
+                        {
+                            customValues[fieldId] = firstValue.DateValue.Value.ToString("yyyy-MM-dd");
+                        }
+                        else if (firstValue.DateTimeValue.HasValue)
+                        {
+                            customValues[fieldId] = firstValue.DateTimeValue.Value.ToString("yyyy-MM-dd HH:mm");
+                        }
+                        else if (firstValue.IntegerValue.HasValue)
+                        {
+                            customValues[fieldId] = firstValue.IntegerValue.ToString();
+                        }
+                        else if (firstValue.DecimalValue.HasValue)
+                        {
+                            customValues[fieldId] = firstValue.DecimalValue.ToString();
+                        }
+                        else if (firstValue.GuidValue.HasValue)
+                        {
+                            customValues[fieldId] = firstValue.GuidValue.ToString();
+                        }
+                        else if (firstValue.ReferencedEntityId.HasValue)
+                        {
+                            customValues[fieldId] = firstValue.ReferencedEntityId.ToString();
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogWarning(ex, "Unable to load EntityValue data for entity {EntityId}, falling back to settings. {Error}", entityId, ex.Message);
+            // Fallback: Try to load from entity settings if EntityValue fails
+            // Note: This requires loading the full entity object
+        }
+
+        return customValues;
     }
 
     private string GetFieldDisplayName(EntityField field)

@@ -3,13 +3,92 @@
 @implements Oqtane.Interfaces.ISettingsControl
 @inject ISettingService SettingService
 @inject IStringLocalizer<Settings> Localizer
+@inject IFolderService FolderService
 
 <div class="container">
     <div class="row mb-1 align-items-center">
-        <Label Class="col-sm-3" For="value" HelpText="Enter a value" ResourceKey="SettingName" ResourceType="@resourceType">Name: </Label>
-            <div class="col-sm-9">
-                <input id="value" type="text" class="form-control" @bind="@_value" />
-            </div>
+        <Label Class="col-sm-3" For="customtitle" HelpText="Custom title to display on the page" ResourceKey="CustomTitle" ResourceType="@resourceType">Custom Title: </Label>
+        <div class="col-sm-9">
+            <input id="customtitle" type="text" class="form-control" @bind="@_customTitle" maxlength="256" />
+        </div>
+    </div>
+
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="enablefeatured" HelpText="Enable featured entity listing" ResourceKey="EnableFeatured" ResourceType="@resourceType">Enable Featured: </Label>
+        <div class="col-sm-9">
+            <input id="enablefeatured" type="checkbox" @bind="@_enableFeatured" />
+        </div>
+    </div>
+
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="featurednumperpage" HelpText="Number of featured entities per page" ResourceKey="FeaturedNumPerPage" ResourceType="@resourceType">Featured Num Per Page: </Label>
+        <div class="col-sm-9">
+            <input id="featurednumperpage" type="number" class="form-control" @bind="@_featuredNumPerPage" min="1" />
+        </div>
+    </div>
+
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="enabletypes" HelpText="Enable entity type listing" ResourceKey="EnableTypes" ResourceType="@resourceType">Enable Types: </Label>
+        <div class="col-sm-9">
+            <input id="enabletypes" type="checkbox" @bind="@_enableTypes" />
+        </div>
+    </div>
+
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="listingnumperpage" HelpText="Number of entities per page in listings" ResourceKey="ListingNumPerPage" ResourceType="@resourceType">Listing Num Per Page: </Label>
+        <div class="col-sm-9">
+            <input id="listingnumperpage" type="number" class="form-control" @bind="@_listingNumPerPage" min="1" />
+        </div>
+    </div>
+
+    <hr />
+    <h5>Image Upload Settings</h5>
+
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="filefolder" HelpText="Oqtane File Manager folder to save uploaded images" ResourceKey="FileFolderId" ResourceType="@resourceType">File Folder ID: </Label>
+    <div class="col-sm-9">
+        <select id="folderList" class="form-select" @bind="@_fileFolderId">
+            @foreach (Folder folder in _folders)
+            {
+                <option value="@(folder.FolderId)">@(new string('-', folder.Level * 2))@(folder.Name)</option>
+            }
+        </select>
+    </div>
+    </div>
+
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="imagethumbwidth" HelpText="Width of thumbnail images in pixels" ResourceKey="ImageThumbWidth" ResourceType="@resourceType">Thumbnail Width: </Label>
+        <div class="col-sm-9">
+            <input id="imagethumbwidth" type="number" class="form-control" @bind="@_imageThumbWidth" min="50" />
+        </div>
+    </div>
+
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="imagethumbheight" HelpText="Height of thumbnail images in pixels" ResourceKey="ImageThumbHeight" ResourceType="@resourceType">Thumbnail Height: </Label>
+        <div class="col-sm-9">
+            <input id="imagethumbheight" type="number" class="form-control" @bind="@_imageThumbHeight" min="50" />
+        </div>
+    </div>
+
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="imagemaxwidth" HelpText="Maximum width of full-size uploaded images in pixels" ResourceKey="ImageMaxWidth" ResourceType="@resourceType">Max Width: </Label>
+        <div class="col-sm-9">
+            <input id="imagemaxwidth" type="number" class="form-control" @bind="@_imageMaxWidth" min="100" />
+        </div>
+    </div>
+
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="imagemaxheight" HelpText="Maximum height of full-size uploaded images in pixels" ResourceKey="ImageMaxHeight" ResourceType="@resourceType">Max Height: </Label>
+        <div class="col-sm-9">
+            <input id="imagemaxheight" type="number" class="form-control" @bind="@_imageMaxHeight" min="100" />
+        </div>
+    </div>
+
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="showphototitle" HelpText="Show the uploaded image file name as title" ResourceKey="ShowPhotoTitle" ResourceType="@resourceType">Show Image Title: </Label>
+        <div class="col-sm-9">
+            <input id="showphototitle" type="checkbox" @bind="@_showPhotoTitle" />
+        </div>
     </div>
 </div>
 
@@ -17,14 +96,41 @@
     private string resourceType = "GIBS.Module.Entity.Settings, GIBS.Module.Entity.Client.Oqtane"; // for localization
     public override string Title => "Entity Settings";
 
-    string _value;
+    private string _customTitle = string.Empty;
+    private bool _enableFeatured;
+    private int _featuredNumPerPage = 10;
+    private bool _enableTypes;
+    private int _listingNumPerPage = 20;
+
+     private List<Folder> _folders = new List<Folder>();
+    // Image Upload Settings
+    private int _fileFolderId = 1;
+    private int _imageThumbWidth = 360;
+    private int _imageThumbHeight = 360;
+    private int _imageMaxWidth = 1600;
+    private int _imageMaxHeight = 900;
+    private bool _showPhotoTitle = true;
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
+            _folders = await FolderService.GetFoldersAsync(PageState.Site.SiteId);
+
             Dictionary<string, string> settings = await SettingService.GetModuleSettingsAsync(ModuleState.ModuleId);
-            _value = SettingService.GetSetting(settings, "SettingName", "");
+            _customTitle = SettingService.GetSetting(settings, "CustomTitle", string.Empty);
+            _enableFeatured = bool.TryParse(SettingService.GetSetting(settings, "EnableFeatured", "true"), out var enableFeatured) && enableFeatured;
+            _featuredNumPerPage = int.TryParse(SettingService.GetSetting(settings, "FeaturedNumPerPage", "10"), out var featuredNum) ? featuredNum : 10;
+            _enableTypes = bool.TryParse(SettingService.GetSetting(settings, "EnableTypes", "true"), out var enableTypes) && enableTypes;
+            _listingNumPerPage = int.TryParse(SettingService.GetSetting(settings, "ListingNumPerPage", "20"), out var listingNum) ? listingNum : 20;
+
+            // Load Image Upload Settings
+            _fileFolderId = int.TryParse(SettingService.GetSetting(settings, "FileFolderId", "1"), out var fileFolderId) ? fileFolderId : 1;
+            _imageThumbWidth = int.TryParse(SettingService.GetSetting(settings, "ImageThumbWidth", "360"), out var thumbWidth) ? thumbWidth : 360;
+            _imageThumbHeight = int.TryParse(SettingService.GetSetting(settings, "ImageThumbHeight", "360"), out var thumbHeight) ? thumbHeight : 360;
+            _imageMaxWidth = int.TryParse(SettingService.GetSetting(settings, "ImageMaxWidth", "1600"), out var maxWidth) ? maxWidth : 1600;
+            _imageMaxHeight = int.TryParse(SettingService.GetSetting(settings, "ImageMaxHeight", "900"), out var maxHeight) ? maxHeight : 900;
+            _showPhotoTitle = bool.TryParse(SettingService.GetSetting(settings, "ShowPhotoTitle", "true"), out var showTitle) && showTitle;
         }
         catch (Exception ex)
         {
@@ -37,7 +143,20 @@
         try
         {
             var settings = await SettingService.GetModuleSettingsAsync(ModuleState.ModuleId);
-            settings = SettingService.SetSetting(settings, "SettingName", _value);
+            settings = SettingService.SetSetting(settings, "CustomTitle", _customTitle ?? string.Empty);
+            settings = SettingService.SetSetting(settings, "EnableFeatured", _enableFeatured.ToString());
+            settings = SettingService.SetSetting(settings, "FeaturedNumPerPage", _featuredNumPerPage.ToString());
+            settings = SettingService.SetSetting(settings, "EnableTypes", _enableTypes.ToString());
+            settings = SettingService.SetSetting(settings, "ListingNumPerPage", _listingNumPerPage.ToString());
+
+            // Save Image Upload Settings
+            settings = SettingService.SetSetting(settings, "FileFolderId", _fileFolderId.ToString());
+            settings = SettingService.SetSetting(settings, "ImageThumbWidth", _imageThumbWidth.ToString());
+            settings = SettingService.SetSetting(settings, "ImageThumbHeight", _imageThumbHeight.ToString());
+            settings = SettingService.SetSetting(settings, "ImageMaxWidth", _imageMaxWidth.ToString());
+            settings = SettingService.SetSetting(settings, "ImageMaxHeight", _imageMaxHeight.ToString());
+            settings = SettingService.SetSetting(settings, "ShowPhotoTitle", _showPhotoTitle.ToString());
+
             await SettingService.UpdateModuleSettingsAsync(settings, ModuleState.ModuleId);
         }
         catch (Exception ex)

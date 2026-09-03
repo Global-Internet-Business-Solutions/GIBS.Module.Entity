@@ -22,6 +22,7 @@ namespace GIBS.Module.Entity.Enums
         EntityLookup = 14,
         FileUpload = 15,
         ImageUpload = 16,
-        HtmlEditor = 17
+        HtmlEditor = 17,
+        HtmlContentDisplay = 18
     }
 }

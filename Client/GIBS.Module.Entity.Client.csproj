@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Version>1.0.5</Version>
+    <Version>1.0.7</Version>
     <Authors>GIBS</Authors>
     <Company>GIBS</Company>
     <Description>User defined entity definitions, grouped fields, typed values, searchable, filterable metadata, and entity specific templates.</Description>
@@ -29,6 +29,26 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Update="Resources\GIBS.Module.Entity\EntityList.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>EntityList.resx</DependentUpon>
+    </Compile>
+    <Compile Update="Resources\GIBS.Module.Entity\EntityTypesEdit.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>EntityTypesEdit.resx</DependentUpon>
+    </Compile>
+    <Compile Update="Resources\GIBS.Module.Entity\EntityTypesIndex.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>EntityTypesIndex.resx</DependentUpon>
+    </Compile>
+    <Compile Update="Resources\GIBS.Module.Entity\FieldsIndex.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>FieldsIndex.resx</DependentUpon>
+    </Compile>
     <Compile Update="Resources\GIBS.Module.Entity\TemplatesEdit.Designer.cs">
       <DesignTime>True</DesignTime>
       <AutoGen>True</AutoGen>
@@ -42,6 +62,22 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Update="Resources\GIBS.Module.Entity\EntityList.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>EntityList.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <EmbeddedResource Update="Resources\GIBS.Module.Entity\EntityTypesEdit.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>EntityTypesEdit.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <EmbeddedResource Update="Resources\GIBS.Module.Entity\EntityTypesIndex.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>EntityTypesIndex.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <EmbeddedResource Update="Resources\GIBS.Module.Entity\FieldsIndex.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>FieldsIndex.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
     <EmbeddedResource Update="Resources\GIBS.Module.Entity\TemplatesEdit.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>TemplatesEdit.Designer.cs</LastGenOutput>

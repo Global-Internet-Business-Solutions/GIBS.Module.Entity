@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
-    <Version>1.0.5</Version>
+    <Version>1.0.7</Version>
     <Product>GIBS.Module.Entity</Product>
     <Authors>GIBS</Authors>
     <Company>GIBS</Company>
@@ -33,5 +33,11 @@
   <ItemGroup>
     <Reference Include="Oqtane.Server"><HintPath>..\..\oqtane.framework\Oqtane.Server\bin\Debug\net10.0\Oqtane.Server.dll</HintPath></Reference>
     <Reference Include="Oqtane.Shared"><HintPath>..\..\oqtane.framework\Oqtane.Server\bin\Debug\net10.0\Oqtane.Shared.dll</HintPath></Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Data\Configuration\" />
+    <Folder Include="Services\Extensions\" />
+    <Folder Include="Services\Implementation\" />
   </ItemGroup>
 </Project>

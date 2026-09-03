@@ -3,6 +3,8 @@
 @using GIBS.Module.Entity.Services
 @using GIBS.Module.Entity.Models
 @using GIBS.Module.Entity.Enums
+@using GIBS.Module.Entity.Interfaces
+@using Oqtane.Modules.HtmlText.Services
 
 @namespace GIBS.Module.Entity
 @inherits ModuleBase
@@ -10,21 +12,24 @@
 @inject IEntityTypeService EntityTypeService
 @inject IEntityFieldService EntityFieldService
 @inject IEntityFieldOptionService EntityFieldOptionService
+@inject IEntityValueService EntityValueService
 @inject NavigationManager NavigationManager
 @inject IStringLocalizer<EntityEdit> Localizer
+@inject ISettingService SettingService
+@inject IFileService FileService
+@inject IHtmlTextService HtmlTextService
 
 <form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
     <div class="container">
+        <h4>@_mode @Localizer["Record"]</h4>
+
         <!-- Entity Type Selection -->
         <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="entitytypeid" HelpText="Select the entity type" ResourceKey="EntityType">Entity Type: </Label>
             <div class="col-sm-9">
                 <select id="entitytypeid" class="form-select" @bind="@_entityTypeId" @bind:after="OnEntityTypeChanged" required>
                     <option value="0">-- @Localizer["SelectOne"] --</option>
-                    @foreach (var entityType in _entityTypes)
-                    {
-                        <option value="@entityType.EntityTypeId">@entityType.Name</option>
-                    }
+                    @RenderEntityTypeOptions(_entityTypeTree, 0)
                 </select>
             </div>
         </div>
@@ -70,24 +75,46 @@
         @if (_customFields.Any())
         {
             <hr />
-            <h5>@Localizer["CustomFields"]</h5>
+         
             @foreach (var customField in _customFields)
             {
-                <div class="row mb-1 align-items-center">
-                    <Label Class="col-sm-3" For="@($"cf_{customField.FieldId}")" HelpText="@customField.HelpText" ResourceKey="@customField.Key">@(string.IsNullOrWhiteSpace(customField.Label) ? customField.Name : customField.Label): </Label>
-                    <div class="col-sm-9">
-                        @if (customField.EditorType == EntityEditorType.HtmlEditor)
+                // Ensure dictionary keys exist before rendering
+                if (!_customFieldValues.ContainsKey(customField.FieldId))
+                {
+                    _customFieldValues[customField.FieldId] = string.Empty;
+                }
+                if (!_customFieldBoolValues.ContainsKey(customField.FieldId))
+                {
+                    _customFieldBoolValues[customField.FieldId] = false;
+                }
+                <div class="row mb-1 align-items-center" @key="customField.FieldId">
+                    @if (!customField.IsCaptionHidden)
+                    {
+                        <Label Class="col-sm-3" For="@($"cf_{customField.FieldId}")" HelpText="@customField.HelpText" ResourceKey="@customField.Key">@(string.IsNullOrWhiteSpace(customField.Label) ? customField.Name : customField.Label): </Label>
+                    }
+                    <div class="@(customField.IsCaptionHidden ? "col-sm-12" : "col-sm-9")">
+                        @if (customField.EditorType == EntityEditorType.HtmlContentDisplay)
                         {
-                            @((MarkupString)(customField.HtmlContent ?? string.Empty))
+                            @((MarkupString)(customField.HtmlContent ?? string.Empty)) 
+                        }
+                        else if (customField.EditorType == EntityEditorType.HtmlEditor)
+                        {
+                            var fieldId = customField.FieldId;
+                            var htmlContent = GetCustomFieldValue(fieldId, customField.DefaultValue);
+                            if (!_htmlEditors.ContainsKey(fieldId))
+                            {
+                                _htmlEditors[fieldId] = null;
+                            }
+                            <RichTextEditor @key="@($"rte_{fieldId}_{_htmlEditorRenderVersion}")" @ref="@_htmlEditors[fieldId]" Content="@htmlContent" />
                         }
                         else if (customField.EditorType == EntityEditorType.TextArea || customField.EditorType == EntityEditorType.RichText)
                         {
-                            <textarea id="@($"cf_{customField.FieldId}")" class="form-control" value="@GetCustomFieldValue(customField.FieldId, customField.DefaultValue)" @onchange="@(e => SetCustomFieldValue(customField.FieldId, e.Value?.ToString()))"></textarea>
+                            <textarea id="@($"cf_{customField.FieldId}")" class="form-control" @bind="@_customFieldValues[customField.FieldId]"></textarea>
                         }
                         else if (customField.EditorType == EntityEditorType.Dropdown)
-                        {
+                        { 
                             var options = GetFieldOptions(customField.FieldId);
-                            <select id="@($"cf_{customField.FieldId}")" class="form-select" value="@GetCustomFieldValue(customField.FieldId, customField.DefaultValue)" @onchange="@(e => SetCustomFieldValue(customField.FieldId, e.Value?.ToString()))">
+                            <select id="@($"cf_{customField.FieldId}")" class="form-select" @bind="@_customFieldValues[customField.FieldId]">
                                 <option value="">@Localizer["SelectOne"]</option>
                                 @foreach (var option in options)
                                 {
@@ -98,24 +125,100 @@
                         else if (customField.EditorType == EntityEditorType.Checkbox || customField.EditorType == EntityEditorType.Toggle)
                         {
                             <div class="form-check mt-2">
-                                <input id="@($"cf_{customField.FieldId}")" type="checkbox" class="form-check-input" checked="@GetCustomFieldBoolValue(customField.FieldId, customField.DefaultValue)" @onchange="@(e => SetCustomFieldValue(customField.FieldId, e.Value?.ToString()))" />
+                                <input id="@($"cf_{customField.FieldId}")" type="checkbox" class="form-check-input" @bind="@_customFieldBoolValues[customField.FieldId]" />
                             </div>
                         }
                         else if (customField.EditorType == EntityEditorType.DatePicker)
                         {
-                            <input id="@($"cf_{customField.FieldId}")" type="date" class="form-control" value="@GetCustomFieldValue(customField.FieldId, customField.DefaultValue)" @onchange="@(e => SetCustomFieldValue(customField.FieldId, e.Value?.ToString()))" />
+                            <input id="@($"cf_{customField.FieldId}")" type="date" class="form-control" value="@GetCustomFieldValue(customField.FieldId, customField.DefaultValue)" @onchange="@(e => _customFieldValues[customField.FieldId] = e.Value?.ToString() ?? string.Empty)" />
                         }
                         else if (customField.EditorType == EntityEditorType.DateTimePicker)
                         {
-                            <input id="@($"cf_{customField.FieldId}")" type="datetime-local" class="form-control" value="@GetCustomFieldValue(customField.FieldId, customField.DefaultValue)" @onchange="@(e => SetCustomFieldValue(customField.FieldId, e.Value?.ToString()))" />
+                            <input id="@($"cf_{customField.FieldId}")" type="datetime-local" class="form-control" value="@GetCustomFieldValue(customField.FieldId, customField.DefaultValue)" @onchange="@(e => _customFieldValues[customField.FieldId] = e.Value?.ToString() ?? string.Empty)" />
                         }
                         else if (customField.EditorType == EntityEditorType.Number || customField.EditorType == EntityEditorType.Currency)
                         {
-                            <input id="@($"cf_{customField.FieldId}")" type="number" class="form-control" value="@GetCustomFieldValue(customField.FieldId, customField.DefaultValue)" @onchange="@(e => SetCustomFieldValue(customField.FieldId, e.Value?.ToString()))" />
+                            <input id="@($"cf_{customField.FieldId}")" type="number" class="form-control" @bind="@_customFieldValues[customField.FieldId]" />
+                        }
+                        else if (customField.EditorType == EntityEditorType.ImageUpload)
+                        {
+                            <div>
+                                <div class="form-group mb-2">
+                                    <label>@customField.Label</label>
+
+                                    <!-- File Manager Component -->
+                                    @if (_currentImageFieldId == 0 || _currentImageFieldId == customField.FieldId)
+                                    {
+                                        <FileManager UploadMultiple="false" Filter="jpg,png,gif,jpeg"
+                                                     FolderId="@_fileFolderId"
+                                                     ShowSuccess="false" ShowFolders="false" ShowFiles="false" ShowImage="false" ShowUpload="true"
+                                                     OnUpload="@(async (fileId) => await HandleFileUploadAsync(fileId, customField.FieldId))" />
+                                    }
+
+                                    <!-- Image Preview - Single or Multiple -->
+                                    @{
+                                        var field = _customFields.FirstOrDefault(f => f.FieldId == customField.FieldId);
+                                        var imagePaths = GetAllImagePathsFromField(customField.FieldId);
+                                    }
+
+                                    @if (imagePaths.Count > 0)
+                                    {
+                                        <div class="mb-2 mt-2">
+                                            @for (int imageIndex = 0; imageIndex < imagePaths.Count; imageIndex++)
+                                            {
+                                                var imagePath = imagePaths[imageIndex];
+                                                var currentIndex = imageIndex;
+                                                <div class="mb-3 position-relative" style="display: inline-block; margin-right: 10px;">
+                                                    <img src="@imagePath" alt="Image preview" style="max-width: 150px; max-height: 150px; border-radius: 4px;" />
+                                                    @if (field?.IsMultiValue == true)
+                                                    {
+                                                        <!-- Delete button -->
+                                                        <button type="button" class="btn btn-sm btn-danger" style="position: absolute; top: 5px; right: 5px;" 
+                                                                @onclick="() => RemoveImageFromField(customField.FieldId, imagePath)"
+                                                                title="Delete image">
+                                                            ✕
+                                                        </button>
+
+                                                        <!-- Move up button -->
+                                                        @if (currentIndex > 0)
+                                                        {
+                                                            <button type="button" class="btn btn-sm btn-secondary" style="position: absolute; bottom: 5px; left: 5px;" 
+                                                                    @onclick="() => MoveImageUp(customField.FieldId, currentIndex)"
+                                                                    title="Move up">
+                                                                ▲
+                                                            </button>
+                                                        }
+
+                                                        <!-- Move down button -->
+                                                        @if (currentIndex < imagePaths.Count - 1)
+                                                        {
+                                                            <button type="button" class="btn btn-sm btn-secondary" style="position: absolute; bottom: 5px; left: 30px;" 
+                                                                    @onclick="() => MoveImageDown(customField.FieldId, currentIndex)"
+                                                                    title="Move down">
+                                                                ▼
+                                                            </button>
+                                                        }
+                                                    }
+                                                </div>
+                                            }
+                                            @if (field?.IsMultiValue != true && imagePaths.Count > 0)
+                                            {
+                                                <div class="mt-2">
+                                                    <small class="text-muted">@imagePaths[0]</small>
+                                                    <br />
+                                                    <button type="button" class="btn btn-sm btn-danger mt-2" @onclick="() => ClearImage(customField.FieldId)">
+                                                        Remove Image
+                                                    </button>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
                         }
                         else
                         {
-                            <input id="@($"cf_{customField.FieldId}")" class="form-control" value="@GetCustomFieldValue(customField.FieldId, customField.DefaultValue)" maxlength="@(customField.MaxLength ?? 2000)" @onchange="@(e => SetCustomFieldValue(customField.FieldId, e.Value?.ToString()))" />
+                            <input id="@($"cf_{customField.FieldId}")" class="form-control" @bind="@_customFieldValues[customField.FieldId]" maxlength="@(customField.MaxLength ?? 2000)" />
                         }
                     </div>
                 </div>
@@ -213,6 +316,7 @@
 @code {
     public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
     public override string RenderMode => RenderModes.Interactive;
+     public override bool UseAdminContainer => false;
 
     public override string Actions => "Add,Edit";
 
@@ -244,6 +348,7 @@
     private DateTime _createdon;
     private string _modifiedby;
     private DateTime _modifiedon;
+    private string _mode => PageState.Action == "Add" ? Localizer["Add"] : Localizer["Edit"];
 
     private const string StatusDraft = "Draft";
     private const string StatusPendingReview = "Pending Review";
@@ -261,11 +366,24 @@
     };
 
     private List<EntityType> _entityTypes = new();
+    private List<EntityType> _entityTypeTree = new();
     private List<Entity> _availableParentEntities = new();
     private List<EntityField> _customFields = new();
     private Dictionary<int, List<EntityFieldOption>> _customFieldOptions = new();
     private Dictionary<int, string> _customFieldValues = new();
+    private Dictionary<int, bool> _customFieldBoolValues = new();
+    private Dictionary<int, RichTextEditor> _htmlEditors = new();
     private Dictionary<int, EntityType> _entityTypeLookup = new();
+    private int _htmlEditorRenderVersion = 0;
+
+    // Image Upload Settings
+    private int _fileFolderId = 1;
+    private int _imageThumbWidth = 360;
+    private int _imageThumbHeight = 360;
+    private int _imageMaxWidth = 1600;
+    private int _imageMaxHeight = 900;
+    private bool _showPhotoTitle = true;
+    private int _currentImageFieldId = 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -273,6 +391,7 @@
         {
             // Load entity types for dropdown
             _entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+            _entityTypeTree = BuildEntityTypeTree(_entityTypes);
             _entityTypeLookup = _entityTypes.ToDictionary(x => x.EntityTypeId, x => x);
 
             if (PageState.Action == "Edit")
@@ -299,11 +418,6 @@
                     _modifiedby = Entity.ModifiedBy;
                     _modifiedon = Entity.ModifiedOn;
 
-                    if (!string.IsNullOrWhiteSpace(Entity.Settings))
-                    {
-                        TryLoadCustomFieldValues(Entity.Settings);
-                    }
-
                     // Load potential parent entities (exclude self)
                     var allEntities = await ClientEntityService.GetEntitysAsync(ModuleState.ModuleId);
                     _availableParentEntities = allEntities.Where(e => e.EntityId != _id && e.EntityTypeId == _entityTypeId).ToList();
@@ -316,7 +430,18 @@
                 _availableParentEntities = allEntities.ToList();
             }
 
+            // Load custom field definitions first
             await LoadCustomFieldsAsync();
+
+            // Load image upload settings
+            await LoadImageSettingsAsync();
+
+            // Then load saved custom field values (Edit mode)
+            if (PageState.Action == "Edit")
+            {
+                await LoadCustomFieldValuesAsync(_id);
+                _htmlEditorRenderVersion++;
+            }
         }
         catch (Exception ex)
         {
@@ -325,9 +450,137 @@
         }
     }
 
+    // protected override async Task OnAfterRenderAsync(bool firstRender)
+    // {
+    //     try
+    //     {
+    //         if (firstRender)
+    //         {
+    //             await logger.LogInformation("OnAfterRenderAsync(firstRender=true) - page first loaded");
+    //             // Log all custom field values to diagnose content issues
+    //             await logger.LogInformation($"_customFieldValues contains {_customFieldValues.Count} items:");
+    //             foreach (var kvp in _customFieldValues.Where(kv => !string.IsNullOrEmpty(kv.Value)))
+    //             {
+    //                 var fieldName = _customFields.FirstOrDefault(f => f.FieldId == kvp.Key)?.Name ?? "Unknown";
+    //                 await logger.LogInformation($"  FieldId {kvp.Key} ({fieldName}): {kvp.Value.Substring(0, Math.Min(50, kvp.Value.Length))}...");
+    //             }
+    //         }
+    //         else
+    //         {
+    //             await logger.LogDebug("OnAfterRenderAsync(firstRender=false) - page re-rendered");
+    //         }
+    //     }
+    //     catch (Exception ex)
+    //     {
+    //         await logger.LogWarning(ex, "Error in OnAfterRenderAsync: {Error}", ex.Message);
+    //     }
+
+    //     await base.OnAfterRenderAsync(firstRender);
+    // }
+
     private async Task OnEntityTypeChanged()
     {
+        await logger.LogInformation($"OnEntityTypeChanged called - EntityTypeId: {_entityTypeId}, EntityId: {_id}");
+
+        // CRITICAL: Sync HTML editors BEFORE reloading fields
+        // This preserves any content that was entered in the HTML editors
+        await SyncHtmlEditorValuesAsync();
+
+        // Store current values to preserve them across the field reload
+        var previousValues = new Dictionary<int, string>(_customFieldValues);
+        var previousBoolValues = new Dictionary<int, bool>(_customFieldBoolValues);
+
         await LoadCustomFieldsAsync();
+        await logger.LogInformation($"After LoadCustomFieldsAsync - _customFields.Count: {_customFields.Count}");
+
+        // Restore the preserved values (especially important for HTML editors that were just synced)
+        foreach (var kvp in previousValues)
+        {
+            _customFieldValues[kvp.Key] = kvp.Value;
+        }
+        foreach (var kvp in previousBoolValues)
+        {
+            _customFieldBoolValues[kvp.Key] = kvp.Value;
+        }
+
+        // If editing an existing entity, load values from database ONLY for fields not yet populated
+        // This handles fields that are new to the child type
+        if (PageState.Action == "Edit" && _id > 0)
+        {
+            try
+            {
+                var dbValues = await EntityValueService.GetAllEntityValuesAsync(_id);
+                await logger.LogInformation($"Loading missing fields from database - Retrieved {dbValues.Count} EntityValue records");
+
+                // Build field lookup
+                var allFieldsLookup = new Dictionary<int, EntityField>();
+                var effectiveTypeIds = GetEffectiveEntityTypeIds(_entityTypeId);
+
+                foreach (var typeId in effectiveTypeIds)
+                {
+                    var fields = await EntityFieldService.GetFieldsAsync(typeId, ModuleState.ModuleId);
+                    foreach (var field in fields.Where(f => f.IsEnabled))
+                    {
+                        if (!allFieldsLookup.ContainsKey(field.FieldId))
+                        {
+                            allFieldsLookup[field.FieldId] = field;
+                        }
+                    }
+                }
+
+                // Load database values ONLY for fields that don't have values yet
+                foreach (var fieldGroup in dbValues.GroupBy(ev => ev.FieldId))
+                {
+                    var fieldId = fieldGroup.Key;
+
+                    // Skip if we already have a value for this field (from sync or previous state)
+                    if (_customFieldValues.ContainsKey(fieldId) && !string.IsNullOrEmpty(_customFieldValues[fieldId]))
+                    {
+                        await logger.LogDebug($"  FieldId {fieldId}: Already has value, skipping database load");
+                        continue;
+                    }
+
+                    var field = _customFields.FirstOrDefault(cf => cf.FieldId == fieldId);
+                    if (field == null && allFieldsLookup.TryGetValue(fieldId, out var hierarchyField))
+                    {
+                        field = hierarchyField;
+                    }
+
+                    if (field == null)
+                    {
+                        await logger.LogWarning($"  FieldId {fieldId}: Field not found, skipping");
+                        continue;
+                    }
+
+                    var values = fieldGroup.OrderBy(v => v.ValueIndex).ToList();
+                    await logger.LogInformation($"  Loading FieldId {fieldId}: {values.Count} values from database");
+
+                    if (field.IsMultiValue)
+                    {
+                        var stringValues = values.Select(v => GetStringValueFromEntityValue(v)).ToList();
+                        _customFieldValues[fieldId] = string.Join(",", stringValues);
+                        await logger.LogDebug($"    Multi-value: {_customFieldValues[fieldId]}");
+                    }
+                    else if (values.Any())
+                    {
+                        var firstValue = values.First();
+
+                        if (field.EditorType == EntityEditorType.Checkbox || field.EditorType == EntityEditorType.Toggle)
+                        {
+                            _customFieldBoolValues[fieldId] = firstValue.BooleanValue ?? false;
+                        }
+                        else
+                        {
+                            _customFieldValues[fieldId] = GetStringValueFromEntityValue(firstValue);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                await logger.LogWarning(ex, "Error loading missing field values from database: {Error}", ex.Message);
+            }
+        }
 
         var allEntities = await ClientEntityService.GetEntitysAsync(ModuleState.ModuleId);
         if (PageState.Action == "Edit")
@@ -338,12 +591,20 @@
         {
             _availableParentEntities = allEntities.Where(e => e.EntityTypeId == _entityTypeId).ToList();
         }
+
+        _htmlEditorRenderVersion++;
+
+        // Force Blazor to re-render with the new state
+        StateHasChanged();
     }
 
     private async Task LoadCustomFieldsAsync()
     {
         _customFields = new List<EntityField>();
         _customFieldOptions = new Dictionary<int, List<EntityFieldOption>>();
+        _customFieldValues = new Dictionary<int, string>();
+        _customFieldBoolValues = new Dictionary<int, bool>();
+        _htmlEditors = new Dictionary<int, RichTextEditor>();
 
         if (_entityTypeId <= 0)
         {
@@ -369,6 +630,32 @@
 
         foreach (var field in _customFields)
         {
+            // Initialize dictionary entries for all fields
+            if (!_customFieldValues.ContainsKey(field.FieldId))
+            {
+                _customFieldValues[field.FieldId] = string.Empty;
+            }
+            if (!_customFieldBoolValues.ContainsKey(field.FieldId))
+            {
+                _customFieldBoolValues[field.FieldId] = false;
+            }
+
+            // Set default values if provided
+            if (!string.IsNullOrWhiteSpace(field.DefaultValue))
+            {
+                if (field.EditorType == EntityEditorType.Checkbox || field.EditorType == EntityEditorType.Toggle)
+                {
+                    if (bool.TryParse(field.DefaultValue, out var boolValue))
+                    {
+                        _customFieldBoolValues[field.FieldId] = boolValue;
+                    }
+                }
+                else
+                {
+                    _customFieldValues[field.FieldId] = field.DefaultValue;
+                }
+            }
+
             if (field.EditorType == EntityEditorType.Dropdown ||
                 field.EditorType == EntityEditorType.RadioList ||
                 field.EditorType == EntityEditorType.CheckboxList ||
@@ -378,9 +665,9 @@
                 _customFieldOptions[field.FieldId] = options.Where(o => o.IsEnabled).OrderBy(o => o.SortOrder).ThenBy(o => o.DisplayText).ToList();
             }
 
-            if (!_customFieldValues.ContainsKey(field.FieldId) && !string.IsNullOrWhiteSpace(field.DefaultValue))
+            if (field.EditorType == EntityEditorType.HtmlEditor)
             {
-                _customFieldValues[field.FieldId] = field.DefaultValue;
+                _htmlEditors[field.FieldId] = null;
             }
         }
     }
@@ -417,6 +704,356 @@
         return defaultValue ?? string.Empty;
     }
 
+    /// <summary>
+    /// Extract file path from ImageUpload field value (stored as JSON)
+    /// Handles both new JSON format: {"fileId": 123, "filePath": "/path/to/image.jpg"}
+    /// And legacy path-only format for backward compatibility
+    /// </summary>
+    private string GetImagePathFromField(int fieldId)
+    {
+        var value = GetCustomFieldValue(fieldId, "");
+
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+
+        try
+        {
+            // Try to parse as JSON first (new format)
+            if (value.StartsWith("{") && value.EndsWith("}"))
+            {
+                var imageData = JsonSerializer.Deserialize<Dictionary<string, object>>(value);
+                if (imageData != null && imageData.TryGetValue("filePath", out var filePath))
+                {
+                    return filePath?.ToString() ?? string.Empty;
+                }
+            }
+        }
+        catch
+        {
+            // If JSON parsing fails, treat as legacy path-only value
+        }
+
+        // Fallback: treat as direct path (backward compatibility)
+        return value;
+    }
+
+    /// <summary>
+    /// Extract all file paths from ImageUpload field value
+    /// Handles both single image JSON and multi-value array formats
+    /// Also handles legacy format where multiple JSON objects are concatenated
+    /// </summary>
+    private List<string> GetAllImagePathsFromField(int fieldId)
+    {
+        var paths = new List<string>();
+        var value = GetCustomFieldValue(fieldId, "");
+
+        if (string.IsNullOrEmpty(value))
+            return paths;
+
+        try
+        {
+            // Try array format first (multi-value with proper JSON array)
+            if (value.StartsWith("[") && value.EndsWith("]"))
+            {
+                var imageArray = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(value);
+                if (imageArray != null)
+                {
+                    foreach (var imageObj in imageArray)
+                    {
+                        if (imageObj != null && imageObj.TryGetValue("filePath", out var filePath))
+                        {
+                            var path = filePath?.ToString();
+                            if (!string.IsNullOrEmpty(path))
+                                paths.Add(path);
+                        }
+                    }
+                }
+                return paths;
+            }
+
+            // Handle legacy format: {"fileId":12,"filePath":"..."}, {"fileId":10,"filePath":"..."}
+            // (multiple JSON objects concatenated without array brackets)
+            if (value.StartsWith("{"))
+            {
+                // Try to split by }, { and reconstruct as array
+                var correctedValue = value.Replace("}, {", "},{");
+                if (!correctedValue.StartsWith("["))
+                    correctedValue = "[" + correctedValue + "]";
+
+                try
+                {
+                    var legacyImageArray = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(correctedValue);
+                    if (legacyImageArray != null)
+                    {
+                        foreach (var imageObj in legacyImageArray)
+                        {
+                            if (imageObj != null && imageObj.TryGetValue("filePath", out var legacyFilePath))
+                            {
+                                var path = legacyFilePath?.ToString();
+                                if (!string.IsNullOrEmpty(path))
+                                    paths.Add(path);
+                            }
+                        }
+                        return paths;
+                    }
+                }
+                catch
+                {
+                    // If array reconstruction fails, try single object
+                }
+
+                // Try single object format
+                var imageData = JsonSerializer.Deserialize<Dictionary<string, object>>(value);
+                if (imageData != null && imageData.TryGetValue("filePath", out var filePath))
+                {
+                    var path = filePath?.ToString();
+                    if (!string.IsNullOrEmpty(path))
+                        paths.Add(path);
+                }
+                return paths;
+            }
+        }
+        catch (Exception ex)
+        {
+            // If JSON parsing fails, treat as legacy path-only value
+            System.Diagnostics.Debug.WriteLine($"Error parsing image paths: {ex.Message}");
+        }
+
+        // Fallback: treat as direct path (backward compatibility)
+        if (!string.IsNullOrEmpty(value))
+            paths.Add(value);
+
+        return paths;
+    }
+
+    /// <summary>
+    /// Extract FileId from ImageUpload field value (stored as JSON)
+    /// Returns 0 if no FileId found
+    /// </summary>
+    private int GetImageFileIdFromField(int fieldId)
+    {
+        var value = GetCustomFieldValue(fieldId, "");
+
+        if (string.IsNullOrEmpty(value))
+            return 0;
+
+        try
+        {
+            // Try to parse as JSON
+            if (value.StartsWith("{") && value.EndsWith("}"))
+            {
+                var imageData = JsonSerializer.Deserialize<Dictionary<string, object>>(value);
+                if (imageData != null && imageData.TryGetValue("fileId", out var fileId))
+                {
+                    if (int.TryParse(fileId?.ToString() ?? "0", out var id))
+                    {
+                        return id;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // If JSON parsing fails, return 0
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Remove a specific image from a multi-value ImageUpload field
+    /// </summary>
+    private async Task RemoveImageFromField(int fieldId, string imagePath)
+    {
+        try
+        {
+            var value = GetCustomFieldValue(fieldId, "");
+
+            if (string.IsNullOrEmpty(value))
+                return;
+
+            List<Dictionary<string, object>> imageArray = null;
+            bool isLegacyFormat = false;
+
+            if (value.StartsWith("[") && value.EndsWith("]"))
+            {
+                // Multi-value array format
+                imageArray = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(value) ?? new List<Dictionary<string, object>>();
+            }
+            else if (value.StartsWith("{"))
+            {
+                // Legacy format: {"fileId":12,"filePath":"..."}, {"fileId":10,"filePath":"..."}
+                // Try to convert to array
+                isLegacyFormat = true;
+                var correctedValue = value.Replace("}, {", "},{");
+                if (!correctedValue.StartsWith("["))
+                    correctedValue = "[" + correctedValue + "]";
+
+                try
+                {
+                    imageArray = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(correctedValue) ?? new List<Dictionary<string, object>>();
+                }
+                catch
+                {
+                    // Single object format
+                    var imageData = JsonSerializer.Deserialize<Dictionary<string, object>>(value);
+                    if (imageData != null && imageData.TryGetValue("filePath", out var path) && path?.ToString() == imagePath)
+                    {
+                        _customFieldValues[fieldId] = string.Empty;
+                        StateHasChanged();
+                        await logger.LogInformation($"Removed single image from field {fieldId}");
+                    }
+                    return;
+                }
+            }
+
+            if (imageArray != null)
+            {
+                // Remove image with matching path
+                var toRemove = imageArray.FirstOrDefault(img => 
+                    img.TryGetValue("filePath", out var path) && path?.ToString() == imagePath);
+
+                if (toRemove != null)
+                {
+                    imageArray.Remove(toRemove);
+
+                    if (imageArray.Count > 0)
+                    {
+                        // If it was legacy format, keep it as array going forward
+                        _customFieldValues[fieldId] = JsonSerializer.Serialize(imageArray);
+                        await logger.LogInformation($"Removed image {imagePath} from field {fieldId}. Remaining: {imageArray.Count}");
+                    }
+                    else
+                    {
+                        _customFieldValues[fieldId] = string.Empty;
+                        await logger.LogInformation($"Removed last image from field {fieldId}");
+                    }
+
+                    StateHasChanged();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error removing image from field {FieldId}: {Error}", fieldId, ex.Message);
+        }
+    }
+
+    private async Task MoveImageUp(int fieldId, int imageIndex)
+    {
+        if (imageIndex <= 0)
+            return;
+
+        try
+        {
+            await logger.LogInformation($"=== MoveImageUp START - FieldId: {fieldId}, Index: {imageIndex}");
+            var value = GetCustomFieldValue(fieldId, "");
+            if (string.IsNullOrEmpty(value))
+            {
+                await logger.LogWarning($"No value found for field {fieldId}");
+                return;
+            }
+
+            await logger.LogInformation($"Current value before move: {value.Substring(0, Math.Min(100, value.Length))}...");
+
+            List<Dictionary<string, object>> imageArray = null;
+
+            if (value.StartsWith("[") && value.EndsWith("]"))
+            {
+                imageArray = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(value) ?? new List<Dictionary<string, object>>();
+            }
+            else if (value.StartsWith("{"))
+            {
+                // Legacy format - convert to array
+                var correctedValue = value.Replace("}, {", "},{");
+                if (!correctedValue.StartsWith("["))
+                    correctedValue = "[" + correctedValue + "]";
+                imageArray = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(correctedValue) ?? new List<Dictionary<string, object>>();
+            }
+
+            if (imageArray != null && imageIndex > 0 && imageIndex < imageArray.Count)
+            {
+                // Swap with previous
+                var temp = imageArray[imageIndex];
+                imageArray[imageIndex] = imageArray[imageIndex - 1];
+                imageArray[imageIndex - 1] = temp;
+
+                var newValue = JsonSerializer.Serialize(imageArray);
+                _customFieldValues[fieldId] = newValue;
+                await logger.LogInformation($"Moved image up at index {imageIndex} in field {fieldId}");
+                await logger.LogInformation($"New value: {newValue.Substring(0, Math.Min(100, newValue.Length))}...");
+                StateHasChanged();
+                await logger.LogInformation($"=== MoveImageUp END (SUCCESS)");
+            }
+            else
+            {
+                await logger.LogWarning($"Cannot move up - imageArray is null or index out of range. ImageArray count: {imageArray?.Count}, Index: {imageIndex}");
+                await logger.LogInformation($"=== MoveImageUp END (INDEX OUT OF RANGE)");
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error moving image up in field {FieldId}: {Error}", fieldId, ex.Message);
+            await logger.LogInformation($"=== MoveImageUp END (EXCEPTION)");
+        }
+    }
+
+    private async Task MoveImageDown(int fieldId, int imageIndex)
+    {
+        try
+        {
+            await logger.LogInformation($"=== MoveImageDown START - FieldId: {fieldId}, Index: {imageIndex}");
+            var value = GetCustomFieldValue(fieldId, "");
+            if (string.IsNullOrEmpty(value))
+            {
+                await logger.LogWarning($"No value found for field {fieldId}");
+                return;
+            }
+
+            await logger.LogInformation($"Current value before move: {value.Substring(0, Math.Min(100, value.Length))}...");
+
+            List<Dictionary<string, object>> imageArray = null;
+
+            if (value.StartsWith("[") && value.EndsWith("]"))
+            {
+                imageArray = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(value) ?? new List<Dictionary<string, object>>();
+            }
+            else if (value.StartsWith("{"))
+            {
+                // Legacy format - convert to array
+                var correctedValue = value.Replace("}, {", "},{");
+                if (!correctedValue.StartsWith("["))
+                    correctedValue = "[" + correctedValue + "]";
+                imageArray = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(correctedValue) ?? new List<Dictionary<string, object>>();
+            }
+
+            if (imageArray != null && imageIndex >= 0 && imageIndex < imageArray.Count - 1)
+            {
+                // Swap with next
+                var temp = imageArray[imageIndex];
+                imageArray[imageIndex] = imageArray[imageIndex + 1];
+                imageArray[imageIndex + 1] = temp;
+
+                var newValue = JsonSerializer.Serialize(imageArray);
+                _customFieldValues[fieldId] = newValue;
+                await logger.LogInformation($"Moved image down at index {imageIndex} in field {fieldId}");
+                await logger.LogInformation($"New value: {newValue.Substring(0, Math.Min(100, newValue.Length))}...");
+                StateHasChanged();
+                await logger.LogInformation($"=== MoveImageDown END (SUCCESS)");
+            }
+            else
+            {
+                await logger.LogWarning($"Cannot move down - imageArray is null or index out of range. ImageArray count: {imageArray?.Count}, Index: {imageIndex}");
+                await logger.LogInformation($"=== MoveImageDown END (INDEX OUT OF RANGE)");
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error moving image down in field {FieldId}: {Error}", fieldId, ex.Message);
+            await logger.LogInformation($"=== MoveImageDown END (EXCEPTION)");
+        }
+    }
+
     private bool GetCustomFieldBoolValue(int fieldId, string defaultValue = null)
     {
         var value = GetCustomFieldValue(fieldId, defaultValue);
@@ -428,6 +1065,40 @@
         _customFieldValues[fieldId] = value ?? string.Empty;
     }
 
+    private async Task SyncHtmlEditorValuesAsync()
+    {
+        await logger.LogInformation($"SyncHtmlEditorValuesAsync START - {_htmlEditors.Count} editors to sync");
+
+        foreach (var field in _customFields.Where(f => f.EditorType == EntityEditorType.HtmlEditor))
+        {
+            if (_htmlEditors.TryGetValue(field.FieldId, out var editor) && editor != null)
+            {
+                try
+                {
+                    var html = await editor.GetHtml();
+                    _customFieldValues[field.FieldId] = html ?? string.Empty;
+                }
+                catch (Exception ex)
+                {
+                    await logger.LogWarning(ex, "Unable to get HTML content for field {FieldId}: {Error}", field.FieldId, ex.Message);
+                }
+            }
+        }
+    }
+
+
+    private void SyncCustomFieldValuesToDictionary()
+    {
+        // Sync bool values back to the string dictionary only for checkbox/toggle fields
+        foreach (var field in _customFields.Where(f => f.EditorType == EntityEditorType.Checkbox || f.EditorType == EntityEditorType.Toggle))
+        {
+            if (_customFieldBoolValues.TryGetValue(field.FieldId, out var boolValue))
+            {
+                _customFieldValues[field.FieldId] = boolValue.ToString();
+            }
+        }
+    }
+
     private void TryLoadCustomFieldValues(string settingsJson)
     {
         try
@@ -435,7 +1106,20 @@
             var values = JsonSerializer.Deserialize<Dictionary<int, string>>(settingsJson);
             if (values != null)
             {
-                _customFieldValues = values;
+                // Merge saved values into existing dictionaries (preserve initialized keys)
+                foreach (var entry in values)
+                {
+                    _customFieldValues[entry.Key] = entry.Value;
+
+                    // Also load bool values from the string dictionary
+                    if (_customFieldBoolValues.ContainsKey(entry.Key))
+                    {
+                        if (bool.TryParse(entry.Value, out var boolValue))
+                        {
+                            _customFieldBoolValues[entry.Key] = boolValue;
+                        }
+                    }
+                }
             }
         }
         catch
@@ -444,19 +1128,511 @@
         }
     }
 
-    private string BuildSettingsWithCustomFields()
+    private async Task LoadCustomFieldValuesAsync(int entityId)
     {
-        var customJson = _customFieldValues.Any()
-            ? JsonSerializer.Serialize(_customFieldValues)
-            : "{}";
-
-        if (string.IsNullOrWhiteSpace(_settings))
+        try
         {
-            return customJson;
+            var allValues = await EntityValueService.GetAllEntityValuesAsync(entityId);
+            await logger.LogInformation($"LoadCustomFieldValuesAsync({entityId}) - Retrieved {allValues.Count} EntityValue records from database");
+
+            // Build a comprehensive field lookup that includes fields from entire type hierarchy
+            // This ensures we can find field definitions even if the entity's type was a parent type when values were saved
+            var allFieldsLookup = new Dictionary<int, EntityField>();
+            var effectiveTypeIds = GetEffectiveEntityTypeIds(_entityTypeId);
+            await logger.LogInformation($"  Effective type IDs for EntityType {_entityTypeId}: [{string.Join(", ", effectiveTypeIds)}]");
+
+            foreach (var typeId in effectiveTypeIds)
+            {
+                var fields = await EntityFieldService.GetFieldsAsync(typeId, ModuleState.ModuleId);
+                await logger.LogInformation($"  Type {typeId}: {fields.Count} fields total, {fields.Count(f => f.IsEnabled)} enabled");
+                foreach (var field in fields.Where(f => f.IsEnabled))
+                {
+                    if (!allFieldsLookup.ContainsKey(field.FieldId))
+                    {
+                        allFieldsLookup[field.FieldId] = field;
+                        if (field.EditorType == EntityEditorType.HtmlEditor)
+                        {
+                            await logger.LogInformation($"    - Found HtmlEditor field {field.FieldId}: {field.Name}");
+                        }
+                    }
+                }
+            }
+            await logger.LogInformation($"  Total unique fields in hierarchy: {allFieldsLookup.Count}");
+
+            foreach (var fieldGroup in allValues.GroupBy(ev => ev.FieldId))
+            {
+                var storedFieldId = fieldGroup.Key;
+
+                // Try to find stored field definition from hierarchy
+                var field = _customFields.FirstOrDefault(cf => cf.FieldId == storedFieldId);
+                if (field == null && allFieldsLookup.TryGetValue(storedFieldId, out var hierarchyField))
+                {
+                    field = hierarchyField;
+                    await logger.LogDebug($"  FieldId {storedFieldId}: Found in hierarchy lookup (not in current _customFields)");
+                }
+
+                if (field == null)
+                {
+                    await logger.LogWarning($"  FieldId {storedFieldId}: Not found in any field list, skipping");
+                    continue;
+                }
+
+                // Map stored values to the active rendered field id by Key when ids differ between parent/child types
+                var targetField = _customFields.FirstOrDefault(cf => string.Equals(cf.Key, field.Key, StringComparison.OrdinalIgnoreCase)) ?? field;
+                var targetFieldId = targetField.FieldId;
+
+                if (targetFieldId != storedFieldId)
+                {
+                    await logger.LogInformation($"  Mapping stored FieldId {storedFieldId} ({field.Key}) to active FieldId {targetFieldId}");
+                }
+
+                var values = fieldGroup.OrderBy(v => v.ValueIndex).ToList();
+
+                if (targetField.EditorType == EntityEditorType.HtmlEditor)
+                {
+                    await logger.LogInformation($"  FieldId {targetFieldId} ({targetField.Name}) - HtmlEditor: {values.Count} values from database");
+                }
+                else
+                {
+                    await logger.LogDebug($"  FieldId {targetFieldId} ({targetField.Name}): {values.Count} values, IsMultiValue: {targetField.IsMultiValue}");
+                }
+
+                if (targetField.IsMultiValue)
+                {
+                    var stringValues = values.Select(v => GetStringValueFromEntityValue(v)).ToList();
+                    _customFieldValues[targetFieldId] = string.Join(",", stringValues);
+                    await logger.LogDebug($"    Multi-value result: {_customFieldValues[targetFieldId]}");
+                }
+                else if (values.Any())
+                {
+                    var firstValue = values.First();
+
+                    if (targetField.EditorType == EntityEditorType.Checkbox || targetField.EditorType == EntityEditorType.Toggle)
+                    {
+                        _customFieldBoolValues[targetFieldId] = firstValue.BooleanValue ?? false;
+                        await logger.LogDebug($"    Boolean value set to: {_customFieldBoolValues[targetFieldId]}");
+                    }
+                    else
+                    {
+                        var stringValue = GetStringValueFromEntityValue(firstValue);
+                        _customFieldValues[targetFieldId] = stringValue;
+
+                        if (targetField.EditorType == EntityEditorType.HtmlEditor)
+                        {
+                            await logger.LogInformation($"    HtmlEditor value loaded: Length={stringValue?.Length ?? 0}, Content preview: {(string.IsNullOrEmpty(stringValue) ? "[EMPTY]" : stringValue.Substring(0, Math.Min(100, stringValue.Length)))}...");
+                        }
+                        else
+                        {
+                            await logger.LogDebug($"    String value set to: {stringValue}");
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogWarning(ex, "Unable to load EntityValue data, falling back to settings. {Error}", ex.Message);
+            // Fallback to Settings for migration period
+            if (!string.IsNullOrWhiteSpace(_settings))
+            {
+                TryLoadCustomFieldValues(_settings);
+            }
+        }
+    }
+
+    private async Task SaveCustomFieldValuesAsync(int entityId)
+    {
+        try
+        {
+            await logger.LogInformation($"=== SaveCustomFieldValuesAsync START ===");
+            await logger.LogInformation($"EntityId: {entityId}, Total custom fields: {_customFields.Count}");
+            await logger.LogInformation($"_customFieldValues dictionary contents BEFORE processing:");
+            foreach (var kvp in _customFieldValues)
+            {
+                await logger.LogInformation($"  [{kvp.Key}] = '{kvp.Value}'");
+            }
+
+            var entitiesToSave = new List<EntityValue>();
+
+            // IMPORTANT: Process fields from the entire hierarchy, not just current type
+            // This ensures parent type fields are preserved when changing to a child type
+            var effectiveTypeIds = GetEffectiveEntityTypeIds(_entityTypeId);
+            var allFieldsFromHierarchy = new Dictionary<int, EntityField>();
+
+            foreach (var typeId in effectiveTypeIds)
+            {
+                var fields = await EntityFieldService.GetFieldsAsync(typeId, ModuleState.ModuleId);
+                foreach (var field in fields.Where(f => f.IsEnabled))
+                {
+                    if (!allFieldsFromHierarchy.ContainsKey(field.FieldId))
+                    {
+                        allFieldsFromHierarchy[field.FieldId] = field;
+                    }
+                }
+            }
+
+            // Also process fields from current type
+            foreach (var field in _customFields)
+            {
+                if (!allFieldsFromHierarchy.ContainsKey(field.FieldId))
+                {
+                    allFieldsFromHierarchy[field.FieldId] = field;
+                }
+            }
+
+            // Load existing values to preserve those from parent types that aren't being edited
+            var existingValues = await EntityValueService.GetAllEntityValuesAsync(entityId);
+            var existingValuesByFieldId = existingValues.GroupBy(ev => ev.FieldId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            // Process all fields from the hierarchy
+            foreach (var field in allFieldsFromHierarchy.Values)
+            {
+                if (!_customFieldValues.ContainsKey(field.FieldId))
+                {
+                    // Field not in current edit form - preserve existing values if any
+                    if (existingValuesByFieldId.TryGetValue(field.FieldId, out var existingFieldValues))
+                    {
+                        await logger.LogInformation($"Preserving field {field.FieldId} ({field.Name}) - {existingFieldValues.Count} existing values");
+                        entitiesToSave.AddRange(existingFieldValues);
+                    }
+                    continue;
+                }
+
+                var stringValue = _customFieldValues[field.FieldId];
+                var boolValue = _customFieldBoolValues.ContainsKey(field.FieldId) 
+                    ? _customFieldBoolValues[field.FieldId] 
+                    : false;
+
+                await logger.LogDebug($"Processing field {field.FieldId} ({field.Name}): EditorType={field.EditorType}, Value={stringValue}, IsEmpty={string.IsNullOrWhiteSpace(stringValue)}");
+
+                if (field.EditorType == EntityEditorType.Checkbox || field.EditorType == EntityEditorType.Toggle)
+                {
+                    if (boolValue)
+                    {
+                        var entityValue = new EntityValue
+                        {
+                            EntityId = entityId,
+                            FieldId = field.FieldId,
+                            ValueIndex = 0,
+                            BooleanValue = boolValue
+                        };
+                        entitiesToSave.Add(entityValue);
+                    }
+                }
+                else if (field.EditorType == EntityEditorType.ImageUpload)
+                {
+                    // Explicitly handle ImageUpload fields - supports both single and multiple images
+                    // For multi-value fields, we store an array of JSON objects: [{"fileId":1,...}, {"fileId":2,...}]
+                    // For single-value fields, we store a single JSON object: {"fileId":1,...}
+                    await logger.LogInformation($"ImageUpload field {field.FieldId}: Raw value = '{stringValue}'");
+
+                    if (!string.IsNullOrWhiteSpace(stringValue))
+                    {
+                        if (field.IsMultiValue)
+                        {
+                            // For multi-value ImageUpload, expect JSON array format
+                            await logger.LogInformation($"Processing multi-value ImageUpload field {field.FieldId}");
+
+                            try
+                            {
+                                if (stringValue.StartsWith("[") && stringValue.EndsWith("]"))
+                                {
+                                    // Parse as JSON array of image objects
+                                    var imageArray = JsonSerializer.Deserialize<List<object>>(stringValue);
+                                    if (imageArray != null && imageArray.Count > 0)
+                                    {
+                                        int valueIndex = 0;
+                                        foreach (var imageObj in imageArray)
+                                        {
+                                            var imageJson = imageObj.ToString();
+                                            if (!string.IsNullOrWhiteSpace(imageJson))
+                                            {
+                                                var entityValue = ConvertToEntityValue(entityId, field, valueIndex, imageJson);
+                                                if (entityValue != null)
+                                                {
+                                                    await logger.LogInformation($"ImageUpload multi-value EntityValue created - FieldId: {entityValue.FieldId}, ValueIndex: {valueIndex}, TextValue: {entityValue.TextValue}");
+                                                    entitiesToSave.Add(entityValue);
+                                                }
+                                                valueIndex++;
+                                            }
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    // Fallback: treat as single image and wrap in array
+                                    var entityValue = ConvertToEntityValue(entityId, field, 0, stringValue);
+                                    if (entityValue != null)
+                                    {
+                                        await logger.LogInformation($"ImageUpload EntityValue created - FieldId: {entityValue.FieldId}, TextValue: {entityValue.TextValue}");
+                                        entitiesToSave.Add(entityValue);
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                await logger.LogWarning($"Error parsing multi-value ImageUpload field {field.FieldId}: {ex.Message}");
+                                // Fallback: treat as single value
+                                var entityValue = ConvertToEntityValue(entityId, field, 0, stringValue);
+                                if (entityValue != null)
+                                {
+                                    entitiesToSave.Add(entityValue);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Single-value ImageUpload
+                            var entityValue = ConvertToEntityValue(entityId, field, 0, stringValue);
+
+                            if (entityValue != null)
+                            {
+                                await logger.LogInformation($"ImageUpload EntityValue created - FieldId: {entityValue.FieldId}, TextValue: {entityValue.TextValue}");
+                                entitiesToSave.Add(entityValue);
+                            }
+                            else
+                            {
+                                await logger.LogWarning($"ImageUpload ConvertToEntityValue returned null for field {field.FieldId}");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        await logger.LogDebug($"ImageUpload field {field.FieldId} is empty, skipping");
+                    }
+                }
+                else if (!string.IsNullOrWhiteSpace(stringValue))
+                {
+                    if (field.IsMultiValue)
+                    {
+                        // Split comma-separated values
+                        var values = stringValue.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(v => v.Trim())
+                            .ToList();
+
+                        int valueIndex = 0;
+                        foreach (var value in values)
+                        {
+                            var entityValue = ConvertToEntityValue(entityId, field, valueIndex, value);
+                            if (entityValue != null)
+                            {
+                                entitiesToSave.Add(entityValue);
+                            }
+                            valueIndex++;
+                        }
+                    }
+                    else
+                    {
+                        var entityValue = ConvertToEntityValue(entityId, field, 0, stringValue);
+                        if (entityValue != null)
+                        {
+                            entitiesToSave.Add(entityValue);
+                        }
+                    }
+                }
+            }
+
+            if (entitiesToSave.Any())
+            {
+                await logger.LogInformation($"Saving {entitiesToSave.Count} EntityValues for Entity {entityId}");
+                foreach (var ev in entitiesToSave)
+                {
+                    await logger.LogDebug($"  - FieldId: {ev.FieldId}, TextValue: {ev.TextValue}, IntValue: {ev.IntegerValue}, BoolValue: {ev.BooleanValue}");
+                }
+                await EntityValueService.ReplaceAllEntityValuesAsync(entityId, entitiesToSave);
+                await logger.LogInformation($"Successfully saved {entitiesToSave.Count} EntityValues for Entity {entityId}");
+            }
+            else
+            {
+                await logger.LogInformation($"No custom field values to save for Entity {entityId}");
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error saving custom field values for entity {EntityId}: {Error}", entityId, ex.Message);
+            // Don't rethrow - allow save to continue even if EntityValue save fails
+        }
+    }
+
+    private EntityValue? ConvertToEntityValue(int entityId, EntityField field, int valueIndex, string stringValue)
+    {
+        if (string.IsNullOrWhiteSpace(stringValue))
+            return null;
+
+        var entityValue = new EntityValue
+        {
+            EntityId = entityId,
+            FieldId = field.FieldId,
+            ValueIndex = valueIndex
+        };
+
+        try
+        {
+            switch (field.DataType)
+            {
+                case EntityDataType.String:
+                case EntityDataType.Guid:
+                case EntityDataType.Json:
+                    entityValue.TextValue = stringValue;
+                    break;
+
+                case EntityDataType.Integer:
+                    if (int.TryParse(stringValue, out var intValue))
+                    {
+                        entityValue.IntegerValue = intValue;
+                    }
+                    else
+                    {
+                        entityValue.TextValue = stringValue; // Fallback
+                    }
+                    break;
+
+                case EntityDataType.Long:
+                    if (long.TryParse(stringValue, out var longValue))
+                    {
+                        entityValue.LongValue = longValue;
+                    }
+                    else
+                    {
+                        entityValue.TextValue = stringValue; // Fallback
+                    }
+                    break;
+
+                case EntityDataType.Decimal:
+                    if (decimal.TryParse(stringValue, out var decimalValue))
+                    {
+                        entityValue.DecimalValue = decimalValue;
+                    }
+                    else
+                    {
+                        entityValue.TextValue = stringValue; // Fallback
+                    }
+                    break;
+
+                case EntityDataType.Boolean:
+                    if (bool.TryParse(stringValue, out var boolValue))
+                    {
+                        entityValue.BooleanValue = boolValue;
+                    }
+                    else
+                    {
+                        entityValue.TextValue = stringValue; // Fallback
+                    }
+                    break;
+
+                case EntityDataType.Date:
+                    if (DateTime.TryParse(stringValue, out var dateValue))
+                    {
+                        entityValue.DateValue = dateValue;
+                    }
+                    else
+                    {
+                        entityValue.TextValue = stringValue; // Fallback
+                    }
+                    break;
+
+                case EntityDataType.DateTime:
+                    if (DateTime.TryParse(stringValue, out var dateTimeValue))
+                    {
+                        entityValue.DateTimeValue = dateTimeValue;
+                    }
+                    else
+                    {
+                        entityValue.TextValue = stringValue; // Fallback
+                    }
+                    break;
+
+                default:
+                    entityValue.TextValue = stringValue;
+                    break;
+            }
+        }
+        catch
+        {
+            // If conversion fails, store as text
+            entityValue.TextValue = stringValue;
         }
 
-        return _settings;
+        return entityValue;
     }
+
+    private string GetStringValueFromEntityValue(EntityValue entityValue)
+    {
+        if (entityValue.TextValue != null) return entityValue.TextValue;
+        if (entityValue.IntegerValue.HasValue) return entityValue.IntegerValue.Value.ToString();
+        if (entityValue.LongValue.HasValue) return entityValue.LongValue.Value.ToString();
+        if (entityValue.DecimalValue.HasValue) return entityValue.DecimalValue.Value.ToString();
+        if (entityValue.BooleanValue.HasValue) return entityValue.BooleanValue.Value.ToString();
+        if (entityValue.DateValue.HasValue) return entityValue.DateValue.Value.ToString("yyyy-MM-dd");
+        if (entityValue.DateTimeValue.HasValue) return entityValue.DateTimeValue.Value.ToString("yyyy-MM-ddTHH:mm");
+        if (entityValue.GuidValue.HasValue) return entityValue.GuidValue.Value.ToString();
+        if (entityValue.ReferencedEntityId.HasValue) return entityValue.ReferencedEntityId.Value.ToString();
+
+        return string.Empty;
+    }
+
+    private string BuildSettingsWithCustomFields()
+    {
+        return _customFieldValues.Any()
+            ? JsonSerializer.Serialize(_customFieldValues)
+            : "{}";
+    }
+
+    private List<EntityType> BuildEntityTypeTree(List<EntityType> flatList)
+    {
+        foreach (var item in flatList)
+        {
+            item.Children = new List<EntityType>();
+        }
+
+        var lookup = flatList.ToDictionary(x => x.EntityTypeId);
+        var rootItems = new List<EntityType>();
+
+        foreach (var item in flatList)
+        {
+            if (item.ParentEntityTypeId == null || !lookup.ContainsKey(item.ParentEntityTypeId.Value))
+            {
+                rootItems.Add(item);
+            }
+            else
+            {
+                lookup[item.ParentEntityTypeId.Value].Children.Add(item);
+            }
+        }
+
+        SortEntityTypes(rootItems);
+        return rootItems;
+    }
+
+    private void SortEntityTypes(List<EntityType> items)
+    {
+        items.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
+        foreach (var item in items)
+        {
+            if (item.Children != null && item.Children.Count > 0)
+            {
+                SortEntityTypes(item.Children);
+            }
+        }
+    }
+
+    private RenderFragment RenderEntityTypeOptions(IEnumerable<EntityType> items, int level = 0) => builder =>
+    {
+        int seq = 0;
+        foreach (var item in items)
+        {
+            builder.OpenElement(seq++, "option");
+            builder.AddAttribute(seq++, "value", item.EntityTypeId);
+            builder.AddContent(seq++, new string('\u00A0', level * 4) + item.Name); // Indent with non-breaking spaces
+            builder.CloseElement();
+
+            if (item.Children != null && item.Children.Count > 0)
+            {
+                builder.AddContent(seq++, RenderEntityTypeOptions(item.Children, level + 1));
+            }
+        }
+    };
 
     private async Task Save()
     {
@@ -466,6 +1642,11 @@
             var interop = new Oqtane.UI.Interop(JSRuntime);
             if (await interop.FormValid(form))
             {
+                await SyncHtmlEditorValuesAsync();
+                SyncCustomFieldValuesToDictionary();
+
+                Entity? savedEntity = null;
+
                 if (PageState.Action == "Add")
                 {
                     Entity Entity = new Entity();
@@ -483,9 +1664,9 @@
                     Entity.IsPublished = bool.Parse(_isPublished);
                     Entity.PublishStartDate = _publishStartDate;
                     Entity.PublishEndDate = _publishEndDate;
-                    Entity.Settings = BuildSettingsWithCustomFields();
-                    Entity = await ClientEntityService.AddEntityAsync(Entity);
-                    await logger.LogInformation("Entity Added {Entity}", Entity);
+                    Entity.Settings = "{}"; // Clear settings, use EntityValue instead
+                    savedEntity = await ClientEntityService.AddEntityAsync(Entity);
+                    await logger.LogInformation("Entity Added {Entity}", savedEntity);
                 }
                 else
                 {
@@ -502,10 +1683,25 @@
                     Entity.IsPublished = bool.Parse(_isPublished);
                     Entity.PublishStartDate = _publishStartDate;
                     Entity.PublishEndDate = _publishEndDate;
-                    Entity.Settings = BuildSettingsWithCustomFields();
+                    Entity.Settings = "{}"; // Clear settings, use EntityValue instead
                     await ClientEntityService.UpdateEntityAsync(Entity);
-                    await logger.LogInformation("Entity Updated {Entity}", Entity);
+                    savedEntity = Entity;
+                    await logger.LogInformation("Entity Updated {Entity}", savedEntity);
                 }
+
+                // Save custom field values to EntityValue table
+                if (savedEntity != null)
+                {
+                    await SaveCustomFieldValuesAsync(savedEntity.EntityId);
+
+                    // Clear featured cache if this entity is featured or was marked as featured
+                    if (bool.Parse(_isFeatured))
+                    {
+                        Index.ClearFeaturedCache(ModuleState.ModuleId);
+                        await logger.LogDebug($"Cleared featured cache for module {ModuleState.ModuleId}");
+                    }
+                }
+
                 NavigationManager.NavigateTo(NavigateUrl(ModuleState.ModuleId, "EntityList"));
             }
             else
@@ -518,5 +1714,145 @@
             await logger.LogError(ex, "Error Saving Entity {Error}", ex.Message);
             AddModuleMessage(Localizer["Message.SaveError"], MessageType.Error);
         }
+    }
+
+    /// <summary>
+    /// Load image upload settings from module settings
+    /// </summary>
+    private async Task LoadImageSettingsAsync()
+    {
+        try
+        {
+            var settings = await SettingService.GetModuleSettingsAsync(ModuleState.ModuleId);
+            _fileFolderId = int.TryParse(SettingService.GetSetting(settings, "FileFolderId", "1"), out var folderId) ? folderId : 1;
+            _imageThumbWidth = int.TryParse(SettingService.GetSetting(settings, "ImageThumbWidth", "360"), out var thumbWidth) ? thumbWidth : 360;
+            _imageThumbHeight = int.TryParse(SettingService.GetSetting(settings, "ImageThumbHeight", "360"), out var thumbHeight) ? thumbHeight : 360;
+            _imageMaxWidth = int.TryParse(SettingService.GetSetting(settings, "ImageMaxWidth", "1600"), out var maxWidth) ? maxWidth : 1600;
+            _imageMaxHeight = int.TryParse(SettingService.GetSetting(settings, "ImageMaxHeight", "900"), out var maxHeight) ? maxHeight : 900;
+            _showPhotoTitle = bool.TryParse(SettingService.GetSetting(settings, "ShowPhotoTitle", "true"), out var showTitle) && showTitle;
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Image Settings {Error}", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Handle file upload from Oqtane FileManager component
+    /// FileManager.OnUpload passes only the FileId (int), not the entire file object.
+    /// We must use IFileService.GetFileAsync(fileId) to retrieve full file details.
+    /// Stores both FileId (for referential integrity) and FilePath (for fast rendering + fallback)
+    /// For single-value fields: {"fileId": 123, "filePath": "/path/to/image.jpg"}
+    /// For multi-value fields: [{"fileId": 123, ...}, {"fileId": 124, ...}]
+    /// Based on: https://github.com/JoeAucoin/GIBS.Module.PhotoGallery/blob/8ae2d64a6ba7a6e91ade00ba4b4a909a8be5efaf/Client/Modules/GIBS.Module.PhotoGallery/ManageGallery.razor
+    /// </summary>
+    private async Task HandleFileUploadAsync(int fileId, int fieldId)
+    {
+        try
+        {
+            await logger.LogInformation($"=== HandleFileUploadAsync START ===");
+            await logger.LogInformation($"FileId: {fileId}, FieldId: {fieldId}");
+
+            // Get full file details from IFileService
+            var uploadedFile = await FileService.GetFileAsync(fileId);
+
+            if (uploadedFile == null)
+            {
+                await logger.LogError($"✗ FileService.GetFileAsync({fileId}) returned null!");
+                AddModuleMessage($"Could not retrieve file details for FileId {fileId}", MessageType.Error);
+                await logger.LogInformation($"=== HandleFileUploadAsync END (FILE NOT FOUND) ===");
+                return;
+            }
+
+            await logger.LogInformation($"✓ File retrieved: Id={uploadedFile.FileId}, Name={uploadedFile.Name}, Url={uploadedFile.Url}");
+
+            // Ensure field is initialized in dictionary
+            if (!_customFieldValues.ContainsKey(fieldId))
+            {
+                _customFieldValues[fieldId] = string.Empty;
+                await logger.LogDebug($"Initialized _customFieldValues[{fieldId}]");
+            }
+
+            // Find the field to check if it's multi-value
+            var field = _customFields.FirstOrDefault(f => f.FieldId == fieldId);
+            bool isMultiValue = field?.IsMultiValue ?? false;
+
+            await logger.LogInformation($"Field info: IsMultiValue={isMultiValue}");
+
+            // Extract FileId and FilePath
+            int resizedFileId = uploadedFile.FileId;
+            string filePath = uploadedFile.Url;
+
+            await logger.LogInformation($"Extracted values - FileId: {resizedFileId}, FilePath: {filePath}");
+
+            // Create image data object with both FileId and FilePath
+            var imageData = new { fileId = resizedFileId, filePath };
+            string jsonValue = JsonSerializer.Serialize(imageData);
+            await logger.LogInformation($"JSON serialized: {jsonValue}");
+
+            if (isMultiValue)
+            {
+                // For multi-value fields, append to existing array
+                string currentValue = _customFieldValues[fieldId];
+                List<object> images;
+
+                if (string.IsNullOrWhiteSpace(currentValue))
+                {
+                    // Start new array
+                    images = new List<object> { imageData };
+                    await logger.LogInformation($"✓ Started new multi-value array");
+                }
+                else if (currentValue.StartsWith("[") && currentValue.EndsWith("]"))
+                {
+                    // Parse existing array and add new image
+                    images = JsonSerializer.Deserialize<List<object>>(currentValue) ?? new List<object>();
+                    images.Add(imageData);
+                    await logger.LogInformation($"✓ Appended to existing array, now {images.Count} images");
+                }
+                else
+                {
+                    // Fallback: assume it's a single JSON object, convert to array
+                    images = new List<object> { JsonSerializer.Deserialize<object>(currentValue), imageData };
+                    await logger.LogInformation($"✓ Converted single to array, now {images.Count} images");
+                }
+
+                _customFieldValues[fieldId] = JsonSerializer.Serialize(images);
+                await logger.LogInformation($"✓ Multi-value image stored: _customFieldValues[{fieldId}]");
+            }
+            else
+            {
+                // For single-value fields, replace the value
+                _customFieldValues[fieldId] = jsonValue;
+                await logger.LogInformation($"✓ Single-value image stored: _customFieldValues[{fieldId}]");
+            }
+
+            // Verify the value was saved
+            var verifyValue = _customFieldValues[fieldId];
+            await logger.LogInformation($"✓ VERIFICATION - Value now in dict: '{verifyValue}'");
+
+            // Reset current field ID after upload
+            _currentImageFieldId = 0;
+
+            // Force UI update
+            StateHasChanged();
+            await logger.LogInformation($"✓ StateHasChanged() called");
+            await logger.LogInformation($"=== HandleFileUploadAsync END (SUCCESS) ===");
+
+            AddModuleMessage("Image uploaded successfully.", MessageType.Success);
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "✗ EXCEPTION in HandleFileUploadAsync: {Error}", ex.Message);
+            await logger.LogInformation($"=== HandleFileUploadAsync END (EXCEPTION) ===");
+            AddModuleMessage($"Error uploading file: {ex.Message}", MessageType.Error);
+        }
+    }
+
+    /// <summary>
+    /// Clear/remove the selected image
+    /// </summary>
+    private void ClearImage(int fieldId)
+    {
+        _customFieldValues[fieldId] = string.Empty;
     }
 }

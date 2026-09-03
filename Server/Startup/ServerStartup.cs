@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Oqtane.Infrastructure;
 using GIBS.Module.Entity.Repository;
 using GIBS.Module.Entity.Services;
+using GIBS.Module.Entity.Interfaces;
 
 namespace GIBS.Module.Entity.Startup
 {
@@ -30,6 +31,9 @@ namespace GIBS.Module.Entity.Startup
             services.AddTransient<IEntityFieldGroupService, ServerEntityFieldGroupService>();
             services.AddTransient<IEntityFieldService, ServerEntityFieldService>();
             services.AddTransient<IEntityFieldOptionService, ServerEntityFieldOptionService>();
+
+            // Phase 2: Entity Value services
+            services.AddTransient<IEntityValueService, EntityValueService>();
 
             // DbContext factory
             services.AddDbContextFactory<EntityContext>(opt => { }, ServiceLifetime.Transient);
