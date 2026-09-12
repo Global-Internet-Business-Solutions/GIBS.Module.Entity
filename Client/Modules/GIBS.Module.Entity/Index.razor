@@ -35,63 +35,126 @@
     </div>
 
 
-    <div class="row mb-3 align-items-center">
-        <div class="col-md-9">
-            @if (_enableFeatured && _featuredRecords != null && _featuredRecords.Any())
+    <div class="row align-items-center">
+        <div class="col-md-9 align-self-start" style="border: 2px solid #ff5733; padding: 1rem;">
+            @if (_showDetail && _recordDetails != null && _detailTemplate != null)
             {
-                <div class="featured-section">
-                    @if (!string.IsNullOrEmpty(_featuredTemplate?.Header))
+                var detailValues = _recordDetailValuesMap.ContainsKey(_recordDetails.EntityId)
+                    ? _recordDetailValuesMap[_recordDetails.EntityId]
+                    : new List<EntityValue>();
+
+                @if (!string.IsNullOrEmpty(_detailTemplate.Header))
+                {
+                    @((MarkupString)TemplateEngine.Render(_detailTemplate.Header, _recordDetails, _entityFields, detailValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups))
+                }
+
+                @if (!string.IsNullOrEmpty(_detailTemplate.Item))
+                {
+                    @((MarkupString)TemplateEngine.Render(_detailTemplate.Item, _recordDetails, _entityFields, detailValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups))
+                }
+
+                @if (!string.IsNullOrEmpty(_detailTemplate.Footer))
+                {
+                    @((MarkupString)TemplateEngine.Render(_detailTemplate.Footer, _recordDetails, _entityFields, detailValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups))
+                }
+            }
+            else if (_showListing)
+            {
+                @if (_listingRecords != null && _listingRecords.Any())
+                {
+                    @if (!string.IsNullOrEmpty(_listingTemplate?.Header))
                     {
-                        @((MarkupString)_featuredTemplate.Header)
+                        @((MarkupString)RenderTemplateSection(_listingTemplate.Header))
                     }
 
-                    <div class="featured-content">
-                        @{
-                            int count = 0;
-                            @* DEBUG OUTPUT *@
-                            <!-- Featured Records Count: @_featuredRecords.Count -->
-                            <!-- Template Type: @_featuredTemplate?.TemplateType -->
-                            <!-- Template Item: @_featuredTemplate?.Item -->
-                            <!-- Template Alternate: @_featuredTemplate?.Alternate -->
+                    {
+                        int count = 0;
 
-                            foreach (var record in _featuredRecords)
+                        foreach (var record in _listingRecords)
+                        {
+                            var templateContent = (count % 2 == 0)
+                                ? _listingTemplate?.Item
+                                : _listingTemplate?.Alternate ?? _listingTemplate?.Item;
+
+                            if (!string.IsNullOrEmpty(templateContent))
                             {
-                                // Alternate between Item and Alternate templates based on index
-                                var templateContent = (count % 2 == 0)
-                                    ? _featuredTemplate?.Item
-                                    : _featuredTemplate?.Alternate ?? _featuredTemplate?.Item;
+                                var entityValues = _listingEntityValuesMap.ContainsKey(record.EntityId)
+                                    ? _listingEntityValuesMap[record.EntityId]
+                                    : new List<EntityValue>();
 
-                                if (!string.IsNullOrEmpty(templateContent))
-                                {
-                                    // Get EntityValue data for this record
-                                    var entityValues = _entityValuesMap.ContainsKey(record.EntityId) 
-                                        ? _entityValuesMap[record.EntityId] 
-                                        : new List<EntityValue>();
-
-                                    // Render template with EntityValue data
-                                    var rendered = TemplateEngine.Render(templateContent, record, _entityFields, entityValues);
-                                    <!-- Entity: @record.EntityId | Count: @count | Template: @(count % 2 == 0 ? "Item" : "Alternate") -->
-                                    <div class="featured-item" data-entity-id="@record.EntityId" data-count="@count">@((MarkupString)rendered)</div>
-                                }
-
-                                if (!string.IsNullOrEmpty(_featuredTemplate?.Separator) && count < _featuredRecords.Count - 1)
-                                {
-                                    <div class="featured-separator">@((MarkupString)_featuredTemplate.Separator)</div>
-                                }
-
-                                count++;
+                                var rendered = TemplateEngine.Render(templateContent, record, _entityFields, entityValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups);
+                                @((MarkupString)rendered)
                             }
-                        }
-                    </div>
 
-                    @if (!string.IsNullOrEmpty(_featuredTemplate?.Footer))
-                    {
-                        @((MarkupString)_featuredTemplate.Footer)
+                            if (!string.IsNullOrEmpty(_listingTemplate?.Separator) && count < _listingRecords.Count - 1)
+                            {
+                                @((MarkupString)_listingTemplate.Separator)
+                            }
+
+                            count++;
+                        }
                     }
-                </div>
+
+                    @if (!string.IsNullOrEmpty(_listingTemplate?.Footer))
+                    {
+                        @((MarkupString)RenderTemplateSection(_listingTemplate.Footer))
+                    }
+                }
+            }
+            else if (_enableFeatured && _featuredRecords != null && _featuredRecords.Any())
+            {
+                @if (!string.IsNullOrEmpty(_featuredTemplate?.Header))
+                {
+                    @((MarkupString)_featuredTemplate.Header)
+                }
+
+                {
+                    int count = 0;
+
+                    foreach (var record in _featuredRecords)
+                    {
+                        var templateContent = (count % 2 == 0)
+                            ? _featuredTemplate?.Item
+                            : _featuredTemplate?.Alternate ?? _featuredTemplate?.Item;
+
+                        if (!string.IsNullOrEmpty(templateContent))
+                        {
+                            var entityValues = _entityValuesMap.ContainsKey(record.EntityId)
+                                ? _entityValuesMap[record.EntityId]
+                                : new List<EntityValue>();
+
+                            var rendered = TemplateEngine.Render(templateContent, record, _entityFields, entityValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups);
+                            @((MarkupString)rendered)
+                        }
+
+                        if (!string.IsNullOrEmpty(_featuredTemplate?.Separator) && count < _featuredRecords.Count - 1)
+                        {
+                            @((MarkupString)_featuredTemplate.Separator)
+                        }
+
+                        count++;
+                    }
+                }
+
+                @if (!string.IsNullOrEmpty(_featuredTemplate?.Footer))
+                {
+                    @((MarkupString)_featuredTemplate.Footer)
+                }
             }
         </div>
-        <div class="col-md-3 text-end">
+        <div class="col-md-3 align-self-start" style="border: 2px solid #ff5733; padding: 1rem;">
+            @if (_entityTypeTree.Any())
+            {
+                <nav class="entitytype-nav" aria-label="Browse by Entity Type">
+                   
+                    <ul class="list-unstyled mb-2">
+                        <li>
+                            <a href="@GetEntityListUrl()">@Localizer["EntityList"]</a>
+                        </li>
+                    </ul>
+                    @RenderEntityTypeNavigation(_entityTypeTree)
+                </nav>
+            }
         </div>
     </div>
 
@@ -106,10 +169,21 @@
     private bool _isLoading = true;
     private string _customTitle;
     private bool _enableFeatured;
+    private bool _showDetail;
+    private bool _showListing;
+    private string _selectedEntityTypeName;
+    private Entity _recordDetails;
+    private EntityTemplate _detailTemplate;
+    private Dictionary<int, List<EntityValue>> _recordDetailValuesMap = new();
     private List<Entity> _featuredRecords = new();
     private EntityTemplate _featuredTemplate;
+    private List<Entity> _listingRecords = new();
+    private EntityTemplate _listingTemplate;
     private List<EntityField> _entityFields = new();
+    private List<EntityFieldGroup> _entityFieldGroups = new();
     private Dictionary<int, List<EntityValue>> _entityValuesMap = new();
+    private Dictionary<int, List<EntityValue>> _listingEntityValuesMap = new();
+    private List<EntityType> _entityTypeTree = new();
 
     // Cache for featured data - persists across component instances
     private static readonly Dictionary<string, FeaturedDataCache> _cache = new();
@@ -119,6 +193,7 @@
         public List<Entity> FeaturedRecords { get; set; }
         public EntityTemplate FeaturedTemplate { get; set; }
         public List<EntityField> EntityFields { get; set; }
+        public List<EntityFieldGroup> FieldGroups { get; set; }
         public Dictionary<int, List<EntityValue>> EntityValuesMap { get; set; }
     }
 
@@ -153,7 +228,34 @@
             _customTitle = SettingService.GetSetting(ModuleState.Settings, "CustomTitle", "");
             _enableFeatured = bool.TryParse(SettingService.GetSetting(ModuleState.Settings, "EnableFeatured", "true"), out var enableFeatured) && enableFeatured;
 
-            if (_enableFeatured)
+            var entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+            var allEntityTypes = entityTypes ?? new List<EntityType>();
+            _entityTypeTree = BuildEntityTypeTree(allEntityTypes);
+
+            var requestedDetailKey = GetQueryValue("detail");
+            _showDetail = !string.IsNullOrWhiteSpace(requestedDetailKey);
+
+            if (_showDetail)
+            {
+                await LoadRecordDetailsAsync(requestedDetailKey);
+            }
+            else
+            {
+                var requestedTypeKey = GetQueryValue("type");
+                _showListing = !string.IsNullOrWhiteSpace(requestedTypeKey);
+
+                if (_showListing)
+                {
+                    var selectedEntityType = allEntityTypes.FirstOrDefault(x => string.Equals(x.Key, requestedTypeKey, StringComparison.OrdinalIgnoreCase));
+                    if (selectedEntityType != null)
+                    {
+                        _selectedEntityTypeName = selectedEntityType.Name;
+                        await LoadListingRecordsAsync(selectedEntityType.EntityTypeId, allEntityTypes);
+                    }
+                }
+            }
+
+            if (!_showDetail && !_showListing && _enableFeatured)
             {
                 // Use cache key based on ModuleId so each module instance has its own cache
                 string cacheKey = $"FeaturedData_{ModuleState.ModuleId}";
@@ -165,6 +267,7 @@
                     _featuredRecords = cached.FeaturedRecords;
                     _featuredTemplate = cached.FeaturedTemplate;
                     _entityFields = cached.EntityFields;
+                    _entityFieldGroups = cached.FieldGroups ?? new List<EntityFieldGroup>();
                     _entityValuesMap = cached.EntityValuesMap;
                     await logger.LogDebug($"Cache HIT: Loaded {_featuredRecords.Count} featured records from cache");
                 }
@@ -180,6 +283,7 @@
                         FeaturedRecords = new List<Entity>(_featuredRecords),
                         FeaturedTemplate = _featuredTemplate,
                         EntityFields = new List<EntityField>(_entityFields),
+                        FieldGroups = new List<EntityFieldGroup>(_entityFieldGroups),
                         EntityValuesMap = new Dictionary<int, List<EntityValue>>(_entityValuesMap)
                     };
                 }
@@ -223,30 +327,17 @@
 
             // Get featured entities ordered by SortOrder
             var entities = await EntityService.GetEntitysAsync(ModuleState.ModuleId);
-            _featuredRecords = entities
+            _featuredRecords = (entities ?? new List<Entity>())
                 .Where(e => e.IsFeatured && e.IsEnabled && e.IsPublished)
                 .OrderBy(e => e.SortOrder)
                 .ToList();
 
             if (_featuredRecords.Any())
             {
-                // Get all entity fields for the featured entity types
-                var entityTypeIds = _featuredRecords.Select(e => e.EntityTypeId).Distinct();
-                foreach (var typeId in entityTypeIds)
-                {
-                    var fields = await EntityFieldService.GetFieldsAsync(typeId, ModuleState.ModuleId);
-                    _entityFields.AddRange(fields ?? new List<EntityField>());
-                }
-
-                // Remove duplicates
-                _entityFields = _entityFields.GroupBy(f => f.FieldId).Select(g => g.First()).ToList();
-
-                // Load EntityValue data for all featured records
-                foreach (var record in _featuredRecords)
-                {
-                    var entityValues = await EntityValueService.GetAllEntityValuesAsync(record.EntityId);
-                    _entityValuesMap[record.EntityId] = entityValues ?? new List<EntityValue>();
-                }
+                var templateData = await LoadEntityFieldsAndValuesAsync(_featuredRecords);
+                _entityFields = templateData.Fields;
+                _entityFieldGroups = templateData.FieldGroups;
+                _entityValuesMap = templateData.EntityValuesMap;
             }
         }
         catch (Exception ex)
@@ -254,4 +345,278 @@
             await logger.LogError(ex, "Error Loading Featured Records {Error}", ex.Message);
         }
     }
+
+    private async Task LoadRecordDetailsAsync(string detailKey)
+    {
+        try
+        {
+            _recordDetails = null;
+            _recordDetailValuesMap.Clear();
+
+            var templates = await EntityTemplateService.GetTemplatesAsync(ModuleState.ModuleId);
+            _detailTemplate = templates?.FirstOrDefault(t => t.TemplateType == "Detail");
+
+            if (_detailTemplate == null)
+            {
+                return;
+            }
+
+            var entities = await EntityService.GetEntitysAsync(ModuleState.ModuleId);
+            _recordDetails = (entities ?? new List<Entity>())
+                .FirstOrDefault(e => e.IsEnabled && e.IsPublished && string.Equals(e.Key, detailKey, StringComparison.OrdinalIgnoreCase));
+
+            if (_recordDetails != null)
+            {
+                var templateData = await LoadEntityFieldsAndValuesAsync(new List<Entity> { _recordDetails });
+                _entityFields = templateData.Fields;
+                _entityFieldGroups = templateData.FieldGroups;
+                _recordDetailValuesMap = templateData.EntityValuesMap;
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Record Details {Error}", ex.Message);
+        }
+    }
+
+    private async Task LoadListingRecordsAsync(int entityTypeId, List<EntityType> allEntityTypes)
+    {
+        try
+        {
+            _listingRecords.Clear();
+            _listingEntityValuesMap.Clear();
+
+            var templates = await EntityTemplateService.GetTemplatesAsync(ModuleState.ModuleId);
+            _listingTemplate = templates?.FirstOrDefault(t => t.TemplateType == "Listing");
+
+            if (_listingTemplate == null)
+            {
+                return;
+            }
+
+            var selectedTypeIds = GetEntityTypeAndDescendantIds(entityTypeId, allEntityTypes ?? new List<EntityType>());
+            var entities = await EntityService.GetEntitysAsync(ModuleState.ModuleId);
+            _listingRecords = (entities ?? new List<Entity>())
+                .Where(e => selectedTypeIds.Contains(e.EntityTypeId) && e.IsEnabled && e.IsPublished)
+                .OrderBy(e => e.SortOrder)
+                .ToList();
+
+            if (_listingRecords.Any())
+            {
+                var templateData = await LoadEntityFieldsAndValuesAsync(_listingRecords);
+                _entityFields = templateData.Fields;
+                _entityFieldGroups = templateData.FieldGroups;
+                _listingEntityValuesMap = templateData.EntityValuesMap;
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading Listing Records {Error}", ex.Message);
+        }
+    }
+
+    private async Task<(List<EntityField> Fields, List<EntityFieldGroup> FieldGroups, Dictionary<int, List<EntityValue>> EntityValuesMap)> LoadEntityFieldsAndValuesAsync(List<Entity> records)
+    {
+        var allEntityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+        var entityTypeLookup = (allEntityTypes ?? new List<EntityType>()).ToDictionary(x => x.EntityTypeId, x => x);
+
+        var entityTypeIds = records.Select(e => e.EntityTypeId).Distinct();
+        var fieldsByKey = new Dictionary<string, EntityField>(StringComparer.OrdinalIgnoreCase);
+        var fieldGroupsByKey = new Dictionary<string, EntityFieldGroup>(StringComparer.OrdinalIgnoreCase);
+        var entityValuesMap = new Dictionary<int, List<EntityValue>>();
+
+        foreach (var typeId in entityTypeIds)
+        {
+            var effectiveTypeIds = GetEffectiveEntityTypeIds(typeId, entityTypeLookup);
+            foreach (var effectiveTypeId in effectiveTypeIds)
+            {
+                var fields = await EntityFieldService.GetFieldsAsync(effectiveTypeId, ModuleState.ModuleId);
+                foreach (var field in (fields ?? new List<EntityField>()).Where(f => f.IsEnabled))
+                {
+                    if (!string.IsNullOrWhiteSpace(field.Key) && !fieldsByKey.ContainsKey(field.Key))
+                    {
+                        fieldsByKey[field.Key] = field;
+                    }
+                }
+
+                var fieldGroups = await EntityFieldGroupService.GetFieldGroupsAsync(effectiveTypeId, ModuleState.ModuleId);
+                foreach (var fieldGroup in (fieldGroups ?? new List<EntityFieldGroup>()).Where(g => g.IsEnabled && !string.IsNullOrWhiteSpace(g.Key)))
+                {
+                    if (!fieldGroupsByKey.ContainsKey(fieldGroup.Key))
+                    {
+                        fieldGroupsByKey[fieldGroup.Key] = fieldGroup;
+                    }
+                }
+            }
+        }
+
+        foreach (var record in records)
+        {
+            var entityValues = await EntityValueService.GetAllEntityValuesAsync(record.EntityId);
+            entityValuesMap[record.EntityId] = entityValues ?? new List<EntityValue>();
+        }
+
+        return (fieldsByKey.Values.ToList(), fieldGroupsByKey.Values.ToList(), entityValuesMap);
+    }
+
+    private string RenderTemplateSection(string templateContent)
+    {
+        if (string.IsNullOrEmpty(templateContent) || !_showListing)
+        {
+            return templateContent ?? string.Empty;
+        }
+
+        var typeName = _selectedEntityTypeName ?? string.Empty;
+        return templateContent
+            .Replace("[Type]", typeName, StringComparison.Ordinal)
+            .Replace("[Type}", typeName, StringComparison.Ordinal);
+    }
+
+    private string GetQueryValue(string queryKey)
+    {
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        if (string.IsNullOrWhiteSpace(uri.Query) || string.IsNullOrWhiteSpace(queryKey))
+        {
+            return string.Empty;
+        }
+
+        foreach (var segment in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var keyValue = segment.Split('=', 2);
+            if (keyValue.Length == 0)
+            {
+                continue;
+            }
+
+            var key = Uri.UnescapeDataString(keyValue[0]);
+            if (string.Equals(key, queryKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return keyValue.Length > 1 ? Uri.UnescapeDataString(keyValue[1]) : string.Empty;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private string BuildCurrentPageUrl(string typeKey = null, string detailKey = null)
+    {
+        var baseUrl = NavigationManager.ToAbsoluteUri(NavigationManager.Uri).GetLeftPart(UriPartial.Path);
+        var queryParameters = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(typeKey))
+        {
+            queryParameters.Add($"type={Uri.EscapeDataString(typeKey)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(detailKey))
+        {
+            queryParameters.Add($"detail={Uri.EscapeDataString(detailKey)}");
+        }
+
+        return queryParameters.Count > 0
+            ? $"{baseUrl}?{string.Join("&", queryParameters)}"
+            : baseUrl;
+    }
+
+    private string GetEditBaseUrl()
+    {
+        return NavigateUrl(ModuleState.ModuleId, "Edit");
+    }
+
+    private string GetEntityTypeUrl(string entityTypeKey)
+    {
+        return BuildCurrentPageUrl(typeKey: entityTypeKey);
+    }
+
+    private string GetEntityListUrl()
+    {
+        return BuildCurrentPageUrl();
+    }
+
+    private static List<int> GetEntityTypeAndDescendantIds(int entityTypeId, List<EntityType> allEntityTypes)
+    {
+        var result = new List<int>();
+        if (entityTypeId <= 0)
+        {
+            return result;
+        }
+
+        var queue = new Queue<int>();
+        var seen = new HashSet<int>();
+        queue.Enqueue(entityTypeId);
+
+        while (queue.Count > 0)
+        {
+            var currentId = queue.Dequeue();
+            if (!seen.Add(currentId))
+            {
+                continue;
+            }
+
+            result.Add(currentId);
+
+            foreach (var child in allEntityTypes.Where(t => t.ParentEntityTypeId == currentId))
+            {
+                queue.Enqueue(child.EntityTypeId);
+            }
+        }
+
+        return result;
+    }
+
+    private static List<int> GetEffectiveEntityTypeIds(int entityTypeId, Dictionary<int, EntityType> lookup)
+    {
+        var result = new List<int>();
+        var currentId = entityTypeId;
+        var seen = new HashSet<int>();
+
+        while (currentId > 0 && lookup.TryGetValue(currentId, out var entityType) && seen.Add(currentId))
+        {
+            result.Add(currentId);
+            currentId = entityType.ParentEntityTypeId ?? 0;
+        }
+
+        return result;
+    }
+
+    private List<EntityType> BuildEntityTypeTree(List<EntityType> flatList)
+    {
+        foreach (var item in flatList)
+        {
+            item.Children = new List<EntityType>();
+        }
+
+        var lookup = flatList.ToDictionary(x => x.EntityTypeId);
+        var roots = new List<EntityType>();
+
+        foreach (var item in flatList.OrderBy(x => x.SortOrder).ThenBy(x => x.Name))
+        {
+            if (item.ParentEntityTypeId.HasValue && lookup.TryGetValue(item.ParentEntityTypeId.Value, out var parent))
+            {
+                parent.Children.Add(item);
+            }
+            else
+            {
+                roots.Add(item);
+            }
+        }
+
+        return roots;
+    }
+
+    private RenderFragment RenderEntityTypeNavigation(IEnumerable<EntityType> entityTypes) => __builder =>
+    {
+        <ul class="list-unstyled ms-2">
+            @foreach (var entityType in entityTypes.OrderBy(x => x.SortOrder).ThenBy(x => x.Name))
+            {
+                <li>
+                    <a href="@GetEntityTypeUrl(entityType.Key)">@entityType.Name</a>
+                    @if (entityType.Children != null && entityType.Children.Count > 0)
+                    {
+                        @RenderEntityTypeNavigation(entityType.Children)
+                    }
+                </li>
+            }
+        </ul>
+    };
 }

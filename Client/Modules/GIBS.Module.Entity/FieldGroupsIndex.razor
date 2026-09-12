@@ -34,7 +34,7 @@ else
             </Header>
             <Row>
                 <td>
-                    <ActionLink Action="FieldGroupsEdit" Parameters="@($"id={context.FieldGroupId}&entitytypeid={_entityTypeId}")" Security="SecurityAccessLevel.Edit" ResourceKey="Edit" />
+                    <ActionLink Action="FieldGroupsEdit" Parameters="@($"id={context.FieldGroupId}&entitytypeid={_entityTypeId}")" Security="SecurityAccessLevel.Edit" Text="Edit" ResourceKey="Edit" />
                 </td>
                 <td>
                     <ActionDialog Header="Delete Field Group" Message="@string.Format(Localizer["Confirm.Delete"], context.Name)" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete" />

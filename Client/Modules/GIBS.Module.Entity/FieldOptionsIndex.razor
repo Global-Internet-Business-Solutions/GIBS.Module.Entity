@@ -33,7 +33,7 @@ else
                 <th style="width: 1px;">@Localizer["Enabled"]</th>
             </Header>
             <Row>
-                <td><ActionLink Action="FieldOptionsEdit" Parameters="@($"id={context.FieldOptionId}&fieldid={_fieldId}")" ResourceKey="Edit" /></td>
+                <td><ActionLink Action="FieldOptionsEdit" Parameters="@($"id={context.FieldOptionId}&fieldid={_fieldId}")" Text="Edit" ResourceKey="Edit" /></td>
                 <td><ActionDialog Header="Delete Option" Message="Are You Sure You Wish To Delete This Option?" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete" Id="@context.FieldOptionId.ToString()" /></td>
                 <td>@context.DisplayText</td>
                 <td>@context.Value</td>

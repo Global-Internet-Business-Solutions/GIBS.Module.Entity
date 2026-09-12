@@ -122,6 +122,22 @@
                                 }
                             </select>
                         }
+                        else if (customField.EditorType == EntityEditorType.MultiSelect)
+                        {
+                            var options = GetFieldOptions(customField.FieldId);
+                            <div class="mt-2">
+                                @foreach (var option in options)
+                                {
+                                    var checkboxId = $"cf_{customField.FieldId}_{option.FieldOptionId}";
+                                    <div class="form-check">
+                                        <input id="@checkboxId" type="checkbox" class="form-check-input"
+                                               checked="@IsMultiSelectOptionSelected(customField.FieldId, option.Value)"
+                                               @onchange="(e => ToggleMultiSelectOption(customField.FieldId, option.Value, e.Value))" />
+                                        <label class="form-check-label" for="@checkboxId">@option.DisplayText</label>
+                                    </div>
+                                }
+                            </div>
+                        }
                         else if (customField.EditorType == EntityEditorType.Checkbox || customField.EditorType == EntityEditorType.Toggle)
                         {
                             <div class="form-check mt-2">
@@ -1065,6 +1081,46 @@
         _customFieldValues[fieldId] = value ?? string.Empty;
     }
 
+    private bool IsMultiSelectOptionSelected(int fieldId, string optionValue)
+    {
+        if (!_customFieldValues.TryGetValue(fieldId, out var current) || string.IsNullOrWhiteSpace(current) || string.IsNullOrWhiteSpace(optionValue))
+        {
+            return false;
+        }
+
+        return current.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(v => v.Trim())
+            .Any(v => string.Equals(v, optionValue, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void ToggleMultiSelectOption(int fieldId, string optionValue, object isChecked)
+    {
+        if (string.IsNullOrWhiteSpace(optionValue))
+        {
+            return;
+        }
+
+        var selectedValues = _customFieldValues.TryGetValue(fieldId, out var current) && !string.IsNullOrWhiteSpace(current)
+            ? current.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(v => v.Trim()).Where(v => !string.IsNullOrWhiteSpace(v)).ToList()
+            : new List<string>();
+
+        var shouldSelect = isChecked is bool checkedValue && checkedValue;
+
+        if (shouldSelect)
+        {
+            if (!selectedValues.Any(v => string.Equals(v, optionValue, StringComparison.OrdinalIgnoreCase)))
+            {
+                selectedValues.Add(optionValue);
+            }
+        }
+        else
+        {
+            selectedValues = selectedValues.Where(v => !string.Equals(v, optionValue, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        _customFieldValues[fieldId] = string.Join(",", selectedValues);
+    }
+
     private async Task SyncHtmlEditorValuesAsync()
     {
         await logger.LogInformation($"SyncHtmlEditorValuesAsync START - {_htmlEditors.Count} editors to sync");
@@ -1694,12 +1750,9 @@
                 {
                     await SaveCustomFieldValuesAsync(savedEntity.EntityId);
 
-                    // Clear featured cache if this entity is featured or was marked as featured
-                    if (bool.Parse(_isFeatured))
-                    {
-                        Index.ClearFeaturedCache(ModuleState.ModuleId);
-                        await logger.LogDebug($"Cleared featured cache for module {ModuleState.ModuleId}");
-                    }
+                    // Always clear featured cache after save to prevent stale template output
+                    Index.ClearFeaturedCache(ModuleState.ModuleId);
+                    await logger.LogDebug($"Cleared featured cache for module {ModuleState.ModuleId}");
                 }
 
                 NavigationManager.NavigateTo(NavigateUrl(ModuleState.ModuleId, "EntityList"));
@@ -1811,9 +1864,38 @@
                 }
                 else
                 {
-                    // Fallback: assume it's a single JSON object, convert to array
-                    images = new List<object> { JsonSerializer.Deserialize<object>(currentValue), imageData };
-                    await logger.LogInformation($"✓ Converted single to array, now {images.Count} images");
+                    // Handle legacy object or concatenated objects, then append new image
+                    images = new List<object>();
+
+                    var correctedValue = currentValue.Replace("}, {", "},{");
+                    if (correctedValue.StartsWith("{") && correctedValue.Contains("},{", StringComparison.Ordinal))
+                    {
+                        correctedValue = "[" + correctedValue + "]";
+                    }
+
+                    try
+                    {
+                        if (correctedValue.StartsWith("[") && correctedValue.EndsWith("]"))
+                        {
+                            images = JsonSerializer.Deserialize<List<object>>(correctedValue) ?? new List<object>();
+                        }
+                        else
+                        {
+                            var single = JsonSerializer.Deserialize<object>(correctedValue);
+                            if (single != null)
+                            {
+                                images.Add(single);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // If legacy payload cannot be parsed, start fresh and keep new upload
+                        images = new List<object>();
+                    }
+
+                    images.Add(imageData);
+                    await logger.LogInformation($"✓ Converted legacy/single to array, now {images.Count} images");
                 }
 
                 _customFieldValues[fieldId] = JsonSerializer.Serialize(images);

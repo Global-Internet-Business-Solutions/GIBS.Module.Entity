@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Razor">
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -44,6 +44,11 @@
       <AutoGen>True</AutoGen>
       <DependentUpon>EntityTypesIndex.resx</DependentUpon>
     </Compile>
+    <Compile Update="Resources\GIBS.Module.Entity\FieldGroupsIndex.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>FieldGroupsIndex.resx</DependentUpon>
+    </Compile>
     <Compile Update="Resources\GIBS.Module.Entity\FieldsIndex.Designer.cs">
       <DesignTime>True</DesignTime>
       <AutoGen>True</AutoGen>
@@ -73,6 +78,10 @@
     <EmbeddedResource Update="Resources\GIBS.Module.Entity\EntityTypesIndex.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>EntityTypesIndex.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <EmbeddedResource Update="Resources\GIBS.Module.Entity\FieldGroupsIndex.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>FieldGroupsIndex.Designer.cs</LastGenOutput>
     </EmbeddedResource>
     <EmbeddedResource Update="Resources\GIBS.Module.Entity\FieldsIndex.resx">
       <Generator>ResXFileCodeGenerator</Generator>

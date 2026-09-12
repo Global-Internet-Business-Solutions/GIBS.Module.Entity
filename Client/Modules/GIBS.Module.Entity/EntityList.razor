@@ -6,6 +6,7 @@
 @inherits ModuleBase
 @inject IEntityService ClientEntityService
 @inject IEntityFieldService EntityFieldService
+@inject IEntityTypeService EntityTypeService
 @inject IEntityValueService EntityValueService
 @inject NavigationManager NavigationManager
 @inject IStringLocalizer<EntityList> Localizer
@@ -107,12 +108,28 @@ else
             .Distinct()
             .ToList();
 
+        var allEntityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+        var entityTypeLookup = (allEntityTypes ?? new List<EntityType>()).ToDictionary(x => x.EntityTypeId, x => x);
+
         _managerFieldsByEntityType = new Dictionary<int, List<EntityField>>();
         foreach (var entityTypeId in entityTypeIds)
         {
-            var fields = await EntityFieldService.GetFieldsAsync(entityTypeId, ModuleState.ModuleId);
-            _managerFieldsByEntityType[entityTypeId] = fields
-                .Where(f => f.IsManagerOnly)
+            var effectiveTypeIds = GetEffectiveEntityTypeIds(entityTypeId, entityTypeLookup);
+            var fieldsById = new Dictionary<int, EntityField>();
+
+            foreach (var effectiveTypeId in effectiveTypeIds)
+            {
+                var fields = await EntityFieldService.GetFieldsAsync(effectiveTypeId, ModuleState.ModuleId);
+                foreach (var field in (fields ?? new List<EntityField>()).Where(f => f.IsManagerOnly))
+                {
+                    if (!fieldsById.ContainsKey(field.FieldId))
+                    {
+                        fieldsById[field.FieldId] = field;
+                    }
+                }
+            }
+
+            _managerFieldsByEntityType[entityTypeId] = fieldsById.Values
                 .OrderBy(f => f.SortOrder)
                 .ThenBy(f => f.Name)
                 .ToList();
@@ -282,6 +299,21 @@ else
         }
 
         return string.Empty;
+    }
+
+    private static List<int> GetEffectiveEntityTypeIds(int entityTypeId, Dictionary<int, EntityType> lookup)
+    {
+        var result = new List<int>();
+        var currentId = entityTypeId;
+        var seen = new HashSet<int>();
+
+        while (currentId > 0 && lookup.TryGetValue(currentId, out var entityType) && seen.Add(currentId))
+        {
+            result.Add(currentId);
+            currentId = entityType.ParentEntityTypeId ?? 0;
+        }
+
+        return result;
     }
 
     private async Task Delete(Entity Entity)

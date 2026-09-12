@@ -19,7 +19,7 @@ else
 {
     <h4>@_entityTypeName - Custom Fields</h4>
     <NavLink class="btn btn-secondary" href="@NavigateUrl(@ModuleState.ModuleId, "BackOffice")">@Localizer["Back"]</NavLink>
-    <ActionLink Action="FieldsEdit" Parameters="@($"entitytypeid={_entityTypeId}")" Security="SecurityAccessLevel.Edit" Text="Add Field" ResourceKey="Add" Class="btn btn-success" />
+    <ActionLink Action="FieldsEdit" Parameters="@($"entitytypeid={_entityTypeId}")" Security="SecurityAccessLevel.Edit" Text="Add Field" ResourceKey="Add" IconName="pencil" IconOnly="true" Class="btn btn-success" />
     <ActionLink Action="FieldGroupsIndex" Parameters="@($"entitytypeid={_entityTypeId}")" Security="SecurityAccessLevel.Edit" Text="Manage Field Groups" ResourceKey="ManageFieldGroups" Class="btn btn-warning" />
     <br /><br />
 

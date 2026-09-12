@@ -40,18 +40,22 @@
                 <RichTextEditor @ref="_itemEditor" Content="@_item" />
             </div>
         </div>
-        <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="alternate" HelpText="Template content for alternating rows" ResourceKey="Alternate">Alternate:</Label>
-            <div class="col-sm-9">
-                <RichTextEditor @ref="_alternateEditor" Content="@_alternate" />
+        @if (ShowAlternateTemplate)
+        {
+            <div class="row mb-1 align-items-center">
+                <Label Class="col-sm-3" For="alternate" HelpText="Template content for alternating rows" ResourceKey="Alternate">Alternate:</Label>
+                <div class="col-sm-9">
+                    <RichTextEditor @ref="_alternateEditor" Content="@_alternate" />
+                </div>
             </div>
-        </div>
+
         <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="separator" HelpText="Template content between items" ResourceKey="Separator">Separator:</Label>
             <div class="col-sm-9">
                 <input id="separator" class="form-control" @bind="@_separator" maxlength="200" />
             </div>
         </div>
+        }
         <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="footer" HelpText="Template content rendered after items" ResourceKey="Footer">Footer:</Label>
             <div class="col-sm-9">
@@ -86,7 +90,7 @@
 
         <br />
         <button type="button" class="btn btn-success" @onclick="SaveTemplate">@Localizer["Save"]</button>
-        <NavLink class="btn btn-secondary" href="@NavigateUrl("TemplatesIndex")">@Localizer["Cancel"]</NavLink>
+        <NavLink class="btn btn-secondary" href="@NavigateUrl(ModuleState.ModuleId, "TemplatesIndex")">@Localizer["Cancel"]</NavLink>
         <br /><br />
         @if (_templateId != -1)
         {
@@ -122,6 +126,8 @@
     private DateTime _createdOn;
     private string _modifiedBy;
     private DateTime _modifiedOn;
+
+    private bool ShowAlternateTemplate => !string.Equals(_templateType, "Detail", StringComparison.OrdinalIgnoreCase);
 
     
 
@@ -204,6 +210,8 @@
                     template = await EntityTemplateService.AddTemplateAsync(template);
                     await logger.LogInformation("Template Added {Template}", template);
                 }
+
+                Index.ClearFeaturedCache(ModuleState.ModuleId);
 
                 NavigationManager.NavigateTo(NavigateUrl(ModuleState.ModuleId, "TemplatesIndex"));
             }

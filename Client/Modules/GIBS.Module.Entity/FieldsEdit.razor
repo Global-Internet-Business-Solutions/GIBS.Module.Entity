@@ -10,10 +10,13 @@
 @inject IEntityFieldService EntityFieldService
 @inject IEntityFieldGroupService EntityFieldGroupService
 @inject IEntityTypeService EntityTypeService
+@inject IEntityFieldOptionService EntityFieldOptionService
 @inject IStringLocalizer<FieldsEdit> Localizer
 
 <form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
     <div class="container">
+        <input type="color" id="moduleColor" @bind="selectedColor" />
+        <p>Selected HEX: @selectedColor</p>
         <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="name" HelpText="Internal name of the field" ResourceKey="Name">Name:</Label>
             <div class="col-sm-9">
@@ -58,8 +61,95 @@
                         <option value="@et">@et</option>
                     }
                 </select>
+        @if (_fieldId > 0 && ShowOptionsManager)
+        {
+            <hr />
+            <h5>@Localizer["ManageOptions"]</h5>
+            <div class="row mb-1 align-items-center">
+                <Label Class="col-sm-3" For="optiondisplaytext" HelpText="Text shown to users" ResourceKey="DisplayText">Display Text:</Label>
+                <div class="col-sm-9">
+                    <input id="optiondisplaytext" class="form-control" @bind="_optionDisplayText" maxlength="200" />
+                </div>
+            </div>
+            <div class="row mb-1 align-items-center">
+                <Label Class="col-sm-3" For="optionvalue" HelpText="Value stored in database" ResourceKey="Value">Value:</Label>
+                <div class="col-sm-9">
+                    <input id="optionvalue" class="form-control" @bind="_optionValue" maxlength="100" />
+                </div>
+            </div>
+            <div class="row mb-1 align-items-center">
+                <Label Class="col-sm-3" For="optionkey" HelpText="Unique stable key" ResourceKey="Key">Key:</Label>
+                <div class="col-sm-9">
+                    <input id="optionkey" class="form-control" @bind="_optionKey" maxlength="100" />
+                </div>
+            </div>
+            <div class="row mb-1 align-items-center">
+                <Label Class="col-sm-3" For="optionsortorder" HelpText="Display order" ResourceKey="SortOrder">Sort Order:</Label>
+                <div class="col-sm-9">
+                    <input id="optionsortorder" type="number" class="form-control" @bind="_optionSortOrder" />
+                </div>
+            </div>
+            <div class="row mb-1 align-items-center">
+                <Label Class="col-sm-3" For="optionisdefault" HelpText="Is this the default selection?" ResourceKey="Default">Default?</Label>
+                <div class="col-sm-9">
+                    <select id="optionisdefault" class="form-select" @bind="_optionIsDefault">
+                        <option value="True">@Localizer["Yes"]</option>
+                        <option value="False">@Localizer["No"]</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row mb-1 align-items-center">
+                <Label Class="col-sm-3" For="optionisenabled" HelpText="Is this option enabled?" ResourceKey="Enabled">Enabled?</Label>
+                <div class="col-sm-9">
+                    <select id="optionisenabled" class="form-select" @bind="_optionIsEnabled">
+                        <option value="True">@Localizer["Yes"]</option>
+                        <option value="False">@Localizer["No"]</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mt-2">
+                <button type="button" class="btn btn-success" @onclick="SaveFieldOptionInline">@(_editingFieldOptionId > 0 ? Localizer["Save"] : Localizer["Add"])</button>
+                @if (_editingFieldOptionId > 0)
+                {
+                    <button type="button" class="btn btn-secondary" @onclick="CancelFieldOptionEdit">@Localizer["Cancel"]</button>
+                }
+            </div>
+
+            <br />
+            @if (_fieldOptions.Any())
+            {
+                <Pager Items="@_fieldOptions">
+                    <Header>
+                        <th style="width: 1px;">&nbsp;</th>
+                        <th style="width: 1px;">&nbsp;</th>
+                        <th>@Localizer["DisplayText"]</th>
+                        <th>@Localizer["Value"]</th>
+                        <th>@Localizer["Key"]</th>
+                        <th style="width: 1px;">@Localizer["Default"]</th>
+                        <th style="width: 1px;">@Localizer["Enabled"]</th>
+                    </Header>
+                    <Row>
+                        <td><button type="button" class="btn btn-primary btn-sm" @onclick="() => EditFieldOption(context)">@Localizer["Edit"]</button></td>
+                        <td><ActionDialog Header="Delete Option" Message="Are You Sure You Wish To Delete This Option?" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger btn-sm" OnClick="@(async () => await DeleteFieldOptionInline(context))" ResourceKey="Delete" Id="@context.FieldOptionId.ToString()" /></td>
+                        <td>@context.DisplayText</td>
+                        <td>@context.Value</td>
+                        <td>@context.Key</td>
+                        <td>@(context.IsDefault ? Localizer["Yes"] : Localizer["No"])</td>
+                        <td>@(context.IsEnabled ? Localizer["Yes"] : Localizer["No"])</td>
+                    </Row>
+                </Pager>
+            }
+            else
+            {
+                <p>@Localizer["Message.DisplayNone"]</p>
+            }
+        }
+
             </div>
         </div>
+
+
+
         <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="fieldgroupid" HelpText="Optional field group" ResourceKey="FieldGroup">Field Group:</Label>
             <div class="col-sm-9">
@@ -95,7 +185,7 @@
             <div class="row mb-1 align-items-center">
                 <Label Class="col-sm-3" For="htmlcontent" HelpText="HTML content displayed when Editor Type is HtmlContentDisplay" ResourceKey="HtmlContent">HTML Content:</Label>
                 <div class="col-sm-9">
-                    <RichTextEditor @ref="_richTextEditor" Content="@_htmlContent" />
+                    <RichTextEditor @ref="_richTextEditor" Content="@_htmlContent" AllowRawHtml="true" />
                 </div>
             </div>
         }
@@ -213,11 +303,7 @@
         <br /><br />
         <button type="button" class="btn btn-success" @onclick="SaveField">@Localizer["Save"]</button>
         <NavLink class="btn btn-secondary" href="@NavigateUrl("FieldsIndex", $"entitytypeid={_entityTypeId}")">@Localizer["Cancel"]</NavLink>
-        @if (_fieldId != -1 && _showOptionsLink)
-        {
-            <br /><br />
-            <ActionLink Action="FieldOptionsIndex" Parameters="@($"fieldid={_fieldId}")" Text="Manage Options" Class="btn btn-primary" ResourceKey="ManageOptions" />
-        }
+
         <br /><br />
         <AuditInfo CreatedBy="@_createdBy" CreatedOn="@_createdOn" ModifiedBy="@_modifiedBy" ModifiedOn="@_modifiedOn"></AuditInfo>
     </div>
@@ -230,7 +316,7 @@
     
     private ElementReference form;
     private bool validated = false;
-
+    private string selectedColor = "#c0c0c0";
     private int _fieldId = -1;
     private int _entityTypeId;
     private string _name = string.Empty;
@@ -262,7 +348,15 @@
     private DateTime _createdOn;
     private string _modifiedBy;
     private DateTime _modifiedOn;
-    private bool _showOptionsLink = false;
+
+    private int _editingFieldOptionId = -1;
+    private string _optionDisplayText = string.Empty;
+    private string _optionValue = string.Empty;
+    private string _optionKey = string.Empty;
+    private int _optionSortOrder = 0;
+    private string _optionIsDefault = "False";
+    private string _optionIsEnabled = "True";
+    private List<EntityFieldOption> _fieldOptions = new();
 
     private List<EntityFieldGroup> _fieldGroups = new();
 
@@ -315,19 +409,141 @@
                     _createdOn = field.CreatedOn;
                     _modifiedBy = field.ModifiedBy;
                     _modifiedOn = field.ModifiedOn;
-
-                    // Show options link for select-style editors
-                    _showOptionsLink = field.EditorType == EntityEditorType.Dropdown ||
-                                     field.EditorType == EntityEditorType.RadioList ||
-                                     field.EditorType == EntityEditorType.CheckboxList ||
-                                     field.EditorType == EntityEditorType.MultiSelect;
                 }
+
+                await LoadFieldOptionsAsync();
             }
         }
         catch (Exception ex)
         {
             await logger.LogError(ex, "Error Loading Field {FieldId} {Error}", _fieldId, ex.Message);
             AddModuleMessage(Localizer["Error.LoadField"], MessageType.Error);
+        }
+    }
+
+    private bool ShowOptionsManager => IsSelectStyleEditor(_editorType);
+
+    private static bool IsSelectStyleEditor(string editorType)
+    {
+        return string.Equals(editorType, EntityEditorType.Dropdown.ToString(), StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(editorType, EntityEditorType.RadioList.ToString(), StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(editorType, EntityEditorType.CheckboxList.ToString(), StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(editorType, EntityEditorType.MultiSelect.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task LoadFieldOptionsAsync()
+    {
+        if (_fieldId <= 0)
+        {
+            _fieldOptions = new List<EntityFieldOption>();
+            return;
+        }
+
+        _fieldOptions = await EntityFieldOptionService.GetFieldOptionsAsync(_fieldId, ModuleState.ModuleId) ?? new List<EntityFieldOption>();
+    }
+
+    private void EditFieldOption(EntityFieldOption option)
+    {
+        _editingFieldOptionId = option.FieldOptionId;
+        _optionDisplayText = option.DisplayText ?? string.Empty;
+        _optionValue = option.Value ?? string.Empty;
+        _optionKey = option.Key ?? string.Empty;
+        _optionSortOrder = option.SortOrder;
+        _optionIsDefault = option.IsDefault.ToString();
+        _optionIsEnabled = option.IsEnabled.ToString();
+    }
+
+    private void CancelFieldOptionEdit()
+    {
+        _editingFieldOptionId = -1;
+        _optionDisplayText = string.Empty;
+        _optionValue = string.Empty;
+        _optionKey = string.Empty;
+        _optionSortOrder = 0;
+        _optionIsDefault = "False";
+        _optionIsEnabled = "True";
+    }
+
+    private async Task SaveFieldOptionInline()
+    {
+        if (_fieldId <= 0)
+        {
+            AddModuleMessage(Localizer["Error.MissingField"], MessageType.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_optionDisplayText) || string.IsNullOrWhiteSpace(_optionValue) || string.IsNullOrWhiteSpace(_optionKey))
+        {
+            AddModuleMessage(Localizer["Message.SaveValidation"], MessageType.Warning);
+            return;
+        }
+
+        try
+        {
+            EntityFieldOption option;
+            if (_editingFieldOptionId > 0)
+            {
+                option = await EntityFieldOptionService.GetFieldOptionAsync(_editingFieldOptionId, ModuleState.ModuleId);
+                if (option == null)
+                {
+                    AddModuleMessage(Localizer["Error.FieldOptionNotFound"], MessageType.Error);
+                    return;
+                }
+            }
+            else
+            {
+                option = new EntityFieldOption
+                {
+                    FieldId = _fieldId
+                };
+            }
+
+            option.DisplayText = _optionDisplayText;
+            option.Value = _optionValue;
+            option.Key = _optionKey;
+            option.SortOrder = _optionSortOrder;
+            option.IsDefault = bool.Parse(_optionIsDefault);
+            option.IsEnabled = bool.Parse(_optionIsEnabled);
+
+            if (_editingFieldOptionId > 0)
+            {
+                await EntityFieldOptionService.UpdateFieldOptionAsync(option);
+                await logger.LogInformation("Field Option Updated {Option}", option);
+            }
+            else
+            {
+                await EntityFieldOptionService.AddFieldOptionAsync(option);
+                await logger.LogInformation("Field Option Added {Option}", option);
+            }
+
+            await LoadFieldOptionsAsync();
+            CancelFieldOptionEdit();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Saving Field Option {Error}", ex.Message);
+            AddModuleMessage(Localizer["Message.SaveError"], MessageType.Error);
+        }
+    }
+
+    private async Task DeleteFieldOptionInline(EntityFieldOption option)
+    {
+        try
+        {
+            await EntityFieldOptionService.DeleteFieldOptionAsync(option.FieldOptionId, ModuleState.ModuleId);
+            await logger.LogInformation("Field Option Deleted {Option}", option);
+            await LoadFieldOptionsAsync();
+            if (_editingFieldOptionId == option.FieldOptionId)
+            {
+                CancelFieldOptionEdit();
+            }
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Deleting Field Option {Option} {Error}", option, ex.Message);
+            AddModuleMessage(Localizer["Message.DeleteError"], MessageType.Error);
         }
     }
 

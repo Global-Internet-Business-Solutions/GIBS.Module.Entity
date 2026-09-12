@@ -11,6 +11,7 @@
 
 <form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
     <div class="container">
+        <h4>@(_fieldGroupId > 0 ? Localizer["Edit"] : Localizer["Add"]) Field Group</h4>
         <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="name" HelpText="Display name of the field group" ResourceKey="Name">Name:</Label>
             <div class="col-sm-9">
@@ -59,7 +60,7 @@
     </div>
     <br />
     <button type="button" class="btn btn-success" @onclick="SaveFieldGroup">@Localizer["Save"]</button>
-    <NavLink class="btn btn-secondary" href="@NavigateUrl("FieldGroupsIndex", $"entitytypeid={_entityTypeId}")">@Localizer["Cancel"]</NavLink>
+    <NavLink class="btn btn-secondary" href="@NavigateUrl(ModuleState.ModuleId, "FieldGroupsIndex", $"entitytypeid={_entityTypeId}")">@Localizer["Cancel"]</NavLink>
     <br /><br />
     @if (_fieldGroupId != -1)
     {
