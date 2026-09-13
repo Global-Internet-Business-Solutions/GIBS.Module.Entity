@@ -72,9 +72,10 @@
 
                         foreach (var record in _listingRecords)
                         {
+                            var recordTemplate = ResolveTemplate(_listingTemplates, "Listing", record.EntityTypeId);
                             var templateContent = (count % 2 == 0)
-                                ? _listingTemplate?.Item
-                                : _listingTemplate?.Alternate ?? _listingTemplate?.Item;
+                                ? recordTemplate?.Item
+                                : recordTemplate?.Alternate ?? recordTemplate?.Item;
 
                             if (!string.IsNullOrEmpty(templateContent))
                             {
@@ -113,9 +114,10 @@
 
                     foreach (var record in _featuredRecords)
                     {
+                        var recordTemplate = ResolveTemplate(_featuredTemplates, "Featured", record.EntityTypeId);
                         var templateContent = (count % 2 == 0)
-                            ? _featuredTemplate?.Item
-                            : _featuredTemplate?.Alternate ?? _featuredTemplate?.Item;
+                            ? recordTemplate?.Item
+                            : recordTemplate?.Alternate ?? recordTemplate?.Item;
 
                         if (!string.IsNullOrEmpty(templateContent))
                         {
@@ -177,13 +179,16 @@
     private Dictionary<int, List<EntityValue>> _recordDetailValuesMap = new();
     private List<Entity> _featuredRecords = new();
     private EntityTemplate _featuredTemplate;
+    private List<EntityTemplate> _featuredTemplates = new();
     private List<Entity> _listingRecords = new();
     private EntityTemplate _listingTemplate;
+    private List<EntityTemplate> _listingTemplates = new();
     private List<EntityField> _entityFields = new();
     private List<EntityFieldGroup> _entityFieldGroups = new();
     private Dictionary<int, List<EntityValue>> _entityValuesMap = new();
     private Dictionary<int, List<EntityValue>> _listingEntityValuesMap = new();
     private List<EntityType> _entityTypeTree = new();
+    private Dictionary<int, EntityType> _entityTypeLookup = new();
 
     // Cache for featured data - persists across component instances
     private static readonly Dictionary<string, FeaturedDataCache> _cache = new();
@@ -192,6 +197,7 @@
     {
         public List<Entity> FeaturedRecords { get; set; }
         public EntityTemplate FeaturedTemplate { get; set; }
+        public List<EntityTemplate> FeaturedTemplates { get; set; }
         public List<EntityField> EntityFields { get; set; }
         public List<EntityFieldGroup> FieldGroups { get; set; }
         public Dictionary<int, List<EntityValue>> EntityValuesMap { get; set; }
@@ -230,6 +236,7 @@
 
             var entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
             var allEntityTypes = entityTypes ?? new List<EntityType>();
+            _entityTypeLookup = allEntityTypes.ToDictionary(x => x.EntityTypeId, x => x);
             _entityTypeTree = BuildEntityTypeTree(allEntityTypes);
 
             var requestedDetailKey = GetQueryValue("detail");
@@ -266,6 +273,7 @@
                     var cached = _cache[cacheKey];
                     _featuredRecords = cached.FeaturedRecords;
                     _featuredTemplate = cached.FeaturedTemplate;
+                    _featuredTemplates = cached.FeaturedTemplates ?? new List<EntityTemplate>();
                     _entityFields = cached.EntityFields;
                     _entityFieldGroups = cached.FieldGroups ?? new List<EntityFieldGroup>();
                     _entityValuesMap = cached.EntityValuesMap;
@@ -282,6 +290,7 @@
                     {
                         FeaturedRecords = new List<Entity>(_featuredRecords),
                         FeaturedTemplate = _featuredTemplate,
+                        FeaturedTemplates = new List<EntityTemplate>(_featuredTemplates),
                         EntityFields = new List<EntityField>(_entityFields),
                         FieldGroups = new List<EntityFieldGroup>(_entityFieldGroups),
                         EntityValuesMap = new Dictionary<int, List<EntityValue>>(_entityValuesMap)
@@ -312,16 +321,20 @@
         {
             // Clear previous data
             _featuredRecords.Clear();
+            _featuredTemplates.Clear();
+            _featuredTemplate = null;
             _entityFields.Clear();
             _entityValuesMap.Clear();
 
-            // Get the Featured template
             var templates = await EntityTemplateService.GetTemplatesAsync(ModuleState.ModuleId);
-            _featuredTemplate = templates?.FirstOrDefault(t => t.TemplateType == "Featured");
+            _featuredTemplates = (templates ?? new List<EntityTemplate>())
+                .Where(t => string.Equals(t.TemplateType, "Featured", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(t => t.TemplateId)
+                .ToList();
+            _featuredTemplate = ResolveDefaultTemplate(_featuredTemplates);
 
-            if (_featuredTemplate == null)
+            if (!_featuredTemplates.Any())
             {
-                // No featured template configured
                 return;
             }
 
@@ -351,21 +364,22 @@
         try
         {
             _recordDetails = null;
+            _detailTemplate = null;
             _recordDetailValuesMap.Clear();
-
-            var templates = await EntityTemplateService.GetTemplatesAsync(ModuleState.ModuleId);
-            _detailTemplate = templates?.FirstOrDefault(t => t.TemplateType == "Detail");
-
-            if (_detailTemplate == null)
-            {
-                return;
-            }
 
             var entities = await EntityService.GetEntitysAsync(ModuleState.ModuleId);
             _recordDetails = (entities ?? new List<Entity>())
                 .FirstOrDefault(e => e.IsEnabled && e.IsPublished && string.Equals(e.Key, detailKey, StringComparison.OrdinalIgnoreCase));
 
-            if (_recordDetails != null)
+            if (_recordDetails == null)
+            {
+                return;
+            }
+
+            var templates = await EntityTemplateService.GetTemplatesAsync(ModuleState.ModuleId);
+            _detailTemplate = ResolveTemplate(templates, "Detail", _recordDetails.EntityTypeId);
+
+            if (_detailTemplate != null)
             {
                 var templateData = await LoadEntityFieldsAndValuesAsync(new List<Entity> { _recordDetails });
                 _entityFields = templateData.Fields;
@@ -384,12 +398,18 @@
         try
         {
             _listingRecords.Clear();
+            _listingTemplates.Clear();
+            _listingTemplate = null;
             _listingEntityValuesMap.Clear();
 
             var templates = await EntityTemplateService.GetTemplatesAsync(ModuleState.ModuleId);
-            _listingTemplate = templates?.FirstOrDefault(t => t.TemplateType == "Listing");
+            _listingTemplates = (templates ?? new List<EntityTemplate>())
+                .Where(t => string.Equals(t.TemplateType, "Listing", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(t => t.TemplateId)
+                .ToList();
+            _listingTemplate = ResolveTemplate(_listingTemplates, "Listing", entityTypeId);
 
-            if (_listingTemplate == null)
+            if (!_listingTemplates.Any())
             {
                 return;
             }
@@ -417,8 +437,11 @@
 
     private async Task<(List<EntityField> Fields, List<EntityFieldGroup> FieldGroups, Dictionary<int, List<EntityValue>> EntityValuesMap)> LoadEntityFieldsAndValuesAsync(List<Entity> records)
     {
-        var allEntityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
-        var entityTypeLookup = (allEntityTypes ?? new List<EntityType>()).ToDictionary(x => x.EntityTypeId, x => x);
+        if (_entityTypeLookup.Count == 0)
+        {
+            var allEntityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+            _entityTypeLookup = (allEntityTypes ?? new List<EntityType>()).ToDictionary(x => x.EntityTypeId, x => x);
+        }
 
         var entityTypeIds = records.Select(e => e.EntityTypeId).Distinct();
         var fieldsByKey = new Dictionary<string, EntityField>(StringComparer.OrdinalIgnoreCase);
@@ -427,7 +450,7 @@
 
         foreach (var typeId in entityTypeIds)
         {
-            var effectiveTypeIds = GetEffectiveEntityTypeIds(typeId, entityTypeLookup);
+            var effectiveTypeIds = GetEffectiveEntityTypeIds(typeId, _entityTypeLookup);
             foreach (var effectiveTypeId in effectiveTypeIds)
             {
                 var fields = await EntityFieldService.GetFieldsAsync(effectiveTypeId, ModuleState.ModuleId);
@@ -470,6 +493,40 @@
         return templateContent
             .Replace("[Type]", typeName, StringComparison.Ordinal)
             .Replace("[Type}", typeName, StringComparison.Ordinal);
+    }
+
+    private EntityTemplate ResolveTemplate(IEnumerable<EntityTemplate> templates, string templateType, int? entityTypeId)
+    {
+        var matchingTemplates = (templates ?? Enumerable.Empty<EntityTemplate>())
+            .Where(t => string.Equals(t.TemplateType, templateType, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(t => t.TemplateId)
+            .ToList();
+
+        if (entityTypeId.HasValue)
+        {
+            var candidateTypeIds = _entityTypeLookup.Count > 0
+                ? GetEffectiveEntityTypeIds(entityTypeId.Value, _entityTypeLookup)
+                : new List<int> { entityTypeId.Value };
+
+            foreach (var candidateTypeId in candidateTypeIds)
+            {
+                var typedTemplate = matchingTemplates.FirstOrDefault(t => t.EntityTypeId == candidateTypeId);
+                if (typedTemplate != null)
+                {
+                    return typedTemplate;
+                }
+            }
+        }
+
+        return matchingTemplates.FirstOrDefault(t => !t.EntityTypeId.HasValue);
+    }
+
+    private static EntityTemplate ResolveDefaultTemplate(IEnumerable<EntityTemplate> templates)
+    {
+        return (templates ?? Enumerable.Empty<EntityTemplate>())
+            .Where(t => !t.EntityTypeId.HasValue)
+            .OrderBy(t => t.TemplateId)
+            .FirstOrDefault();
     }
 
     private string GetQueryValue(string queryKey)

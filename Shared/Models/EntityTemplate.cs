@@ -13,6 +13,8 @@ namespace GIBS.Module.Entity.Models
         [Required]
         public int ModuleId { get; set; }
 
+        public int? EntityTypeId { get; set; }
+
         [StringLength(200)]
         public string TemplateType { get; set; }
 

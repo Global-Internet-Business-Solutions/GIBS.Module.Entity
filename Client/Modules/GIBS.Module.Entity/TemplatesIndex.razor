@@ -4,6 +4,7 @@
 @namespace GIBS.Module.Entity
 @inherits ModuleBase
 @inject IEntityTemplateService EntityTemplateService
+@inject IEntityTypeService EntityTypeService
 @inject IStringLocalizer<TemplatesIndex> Localizer
 
 @if (_templates == null)
@@ -25,6 +26,7 @@ else
                 <th style="width: 1px;">&nbsp;</th>
                 <th style="width: 1px;">&nbsp;</th>
                 <th>Template Type</th>
+                <th>Entity Type</th>
                 <th>Page Title</th>
                 <th>Page Header</th>
             </Header>
@@ -32,6 +34,7 @@ else
                 <td><ActionLink Action="TemplatesEdit" Parameters="@($"id={context.TemplateId}")" Text="@Localizer["Edit"]" Security="SecurityAccessLevel.Edit" ResourceKey="Edit" /></td>
                 <td><ActionDialog Header="Delete Template" Message="Are You Sure You Wish To Delete This Template?" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await Delete(context))" ResourceKey="Delete" Id="@context.TemplateId.ToString()" /></td>
                 <td>@context.TemplateType</td>
+                <td>@GetEntityTypeName(context)</td>
                 <td>@context.PageTitle</td>
                 <td>@context.PageHeader</td>
             </Row>
@@ -50,12 +53,15 @@ else
     public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
 
     private List<EntityTemplate> _templates;
+    private Dictionary<int, string> _entityTypeNames = new();
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
             _templates = await EntityTemplateService.GetTemplatesAsync(ModuleState.ModuleId);
+            var entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId) ?? new List<EntityType>();
+            _entityTypeNames = entityTypes.ToDictionary(x => x.EntityTypeId, x => x.Name);
         }
         catch (Exception ex)
         {
@@ -64,12 +70,25 @@ else
         }
     }
 
+    private string GetEntityTypeName(EntityTemplate template)
+    {
+        if (!template.EntityTypeId.HasValue)
+        {
+            return "Default (All Types)";
+        }
+
+        return _entityTypeNames.TryGetValue(template.EntityTypeId.Value, out var name)
+            ? name
+            : $"Type #{template.EntityTypeId.Value}";
+    }
+
     private async Task Delete(EntityTemplate template)
     {
         try
         {
             await EntityTemplateService.DeleteTemplateAsync(template.TemplateId, ModuleState.ModuleId);
             await logger.LogInformation("Template Deleted {Template}", template);
+            Index.ClearFeaturedCache(ModuleState.ModuleId);
             _templates = await EntityTemplateService.GetTemplatesAsync(ModuleState.ModuleId);
             StateHasChanged();
         }

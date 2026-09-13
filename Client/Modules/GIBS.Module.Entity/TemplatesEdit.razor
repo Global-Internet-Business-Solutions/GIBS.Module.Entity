@@ -7,6 +7,7 @@
 @inherits ModuleBase
 @inject NavigationManager NavigationManager
 @inject IEntityTemplateService EntityTemplateService
+@inject IEntityTypeService EntityTypeService
 @inject IStringLocalizer<TemplatesEdit> Localizer
 
 <form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
@@ -21,7 +22,18 @@
                 </select>
             </div>
         </div>
-
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="entitytypeid" HelpText="Optional entity type scope for this template" ResourceKey="EntityType">Entity Type:</Label>
+            <div class="col-sm-9">
+                <select id="entitytypeid" class="form-select" @bind="@_entityTypeId">
+                    <option value="">Default (All Types)</option>
+                    @foreach (var entityType in _entityTypes.OrderBy(x => x.SortOrder).ThenBy(x => x.Name))
+                    {
+                        <option value="@entityType.EntityTypeId">@entityType.Name</option>
+                    }
+                </select>
+            </div>
+        </div>
 
         <hr />
 
@@ -107,6 +119,7 @@
 
     private int _templateId = -1;
     private string _templateType = "Listing";
+    private string _entityTypeId = string.Empty;
     private string _header = string.Empty;
     private string _item = string.Empty;
     private string _alternate = string.Empty;
@@ -126,6 +139,7 @@
     private DateTime _createdOn;
     private string _modifiedBy;
     private DateTime _modifiedOn;
+    private List<EntityType> _entityTypes = new();
 
     private bool ShowAlternateTemplate => !string.Equals(_templateType, "Detail", StringComparison.OrdinalIgnoreCase);
 
@@ -135,12 +149,15 @@
     {
         try
         {
+            _entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId) ?? new List<EntityType>();
+
             if (QueryStringHelper.TryGetInt(PageState.QueryString, "id", out _templateId) && _templateId > 0)
             {
                 var template = await EntityTemplateService.GetTemplateAsync(_templateId, ModuleState.ModuleId);
                 if (template != null)
                 {
                     _templateType = string.IsNullOrWhiteSpace(template.TemplateType) ? "Listing" : template.TemplateType;
+                    _entityTypeId = template.EntityTypeId?.ToString() ?? string.Empty;
                     _header = template.Header ?? string.Empty;
                     _item = template.Item ?? string.Empty;
                     _alternate = template.Alternate ?? string.Empty;
@@ -190,6 +207,7 @@
                 }
 
                 template.TemplateType = _templateType;
+                template.EntityTypeId = int.TryParse(_entityTypeId, out var entityTypeId) ? entityTypeId : null;
                 template.Header = _headerEditor != null ? await _headerEditor.GetHtml() : _header;
                 template.Item = _itemEditor != null ? await _itemEditor.GetHtml() : _item;
                 template.Alternate = _alternateEditor != null ? await _alternateEditor.GetHtml() : _alternate;

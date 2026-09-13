@@ -27,7 +27,7 @@ namespace GIBS.Module.Entity.Helpers
     ///   [Field:FieldKey:Index] - indexed custom field value for multi-value fields (for example image list)
     ///   [FieldList:FieldKey] - unordered list (<ul><li>...</li></ul>) for multi-value fields
     ///   [FieldGroup:FieldGroupKey] - two-column table (Label | Value) for fields in the specified group
-    ///   [HtmlContent:FieldKey] - raw HtmlContent from matching EntityField definition
+    ///   [HtmlContent:FieldKey] - raw HTML from the record value, or field-level HtmlContent when no record value exists
     ///   [ViewLink]...[/ViewLink] - hyperlink to current page with ?detail=Entity.Key and class="viewLink"
     ///   [Edit]              - edit hyperlink with pencil icon for current entity
     ///   [HASIMAGES]...[/HASIMAGES] - shows block only when the record has ImageUpload values
@@ -96,7 +96,7 @@ namespace GIBS.Module.Entity.Helpers
 
                 if (template.Contains(htmlToken))
                 {
-                    result.Replace(htmlToken, field.HtmlContent ?? string.Empty);
+                    result.Replace(htmlToken, ResolveHtmlTokenValue(field, fieldValue));
                 }
             }
 
@@ -156,9 +156,10 @@ namespace GIBS.Module.Entity.Helpers
                 var fieldListToken = $"[FieldList:{field.Key}]";
                 var htmlToken = $"[HtmlContent:{field.Key}]";
 
+                customValues.TryGetValue(field.FieldId, out var fieldValue);
+
                 if (template.Contains(fieldToken))
                 {
-                    customValues.TryGetValue(field.FieldId, out var fieldValue);
                     result.Replace(fieldToken, fieldValue ?? string.Empty);
                 }
 
@@ -176,7 +177,7 @@ namespace GIBS.Module.Entity.Helpers
 
                 if (template.Contains(htmlToken))
                 {
-                    result.Replace(htmlToken, field.HtmlContent ?? string.Empty);
+                    result.Replace(htmlToken, ResolveHtmlTokenValue(field, fieldValue));
                 }
             }
 
@@ -325,6 +326,16 @@ namespace GIBS.Module.Entity.Helpers
 
             result.Clear();
             result.Append(content);
+        }
+
+        private static string ResolveHtmlTokenValue(EntityField field, string fieldValue)
+        {
+            if (!string.IsNullOrWhiteSpace(fieldValue))
+            {
+                return fieldValue;
+            }
+
+            return field?.HtmlContent ?? string.Empty;
         }
 
         /// <summary>
