@@ -7,7 +7,7 @@ using Oqtane.Migrations.EntityBuilders;
 
 namespace GIBS.Module.Entity.Migrations.EntityBuilders
 {
-    public class EntityValueEntityBuilder : BaseEntityBuilder<EntityValueEntityBuilder>
+    public class EntityValueEntityBuilder : AuditableBaseEntityBuilder<EntityValueEntityBuilder>
     {
         private const string _entityTableName = "GIBS_EntityValue";
         private readonly PrimaryKey<EntityValueEntityBuilder> _primaryKey = 
@@ -46,12 +46,7 @@ namespace GIBS.Module.Entity.Migrations.EntityBuilders
             DateTimeValue = AddDateTimeColumn(table, "DateTimeValue", true);
             GuidValue = AddGuidColumn(table, "GuidValue", true);
             ReferencedEntityId = AddIntegerColumn(table, "ReferencedEntityId", true);
-
-            // Audit columns (from ModelBase)
-            CreatedBy = AddStringColumn(table, "CreatedBy", 256, true);
-            CreatedOn = AddDateTimeColumn(table, "CreatedOn", false);
-            ModifiedBy = AddStringColumn(table, "ModifiedBy", 256, true);
-            ModifiedOn = AddDateTimeColumn(table, "ModifiedOn", false);
+            AddAuditableColumns(table);
 
             return this;
         }
@@ -69,9 +64,5 @@ namespace GIBS.Module.Entity.Migrations.EntityBuilders
         public OperationBuilder<AddColumnOperation> DateTimeValue { get; set; } = null!;
         public OperationBuilder<AddColumnOperation> GuidValue { get; set; } = null!;
         public OperationBuilder<AddColumnOperation> ReferencedEntityId { get; set; } = null!;
-        public OperationBuilder<AddColumnOperation> CreatedBy { get; set; } = null!;
-        public OperationBuilder<AddColumnOperation> CreatedOn { get; set; } = null!;
-        public OperationBuilder<AddColumnOperation> ModifiedBy { get; set; } = null!;
-        public OperationBuilder<AddColumnOperation> ModifiedOn { get; set; } = null!;
     }
 }

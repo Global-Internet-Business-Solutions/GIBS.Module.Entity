@@ -16,53 +16,12 @@ namespace GIBS.Module.Entity.Migrations
 
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            string tableName = ActiveDatabase.RewriteName("GIBS_EntityValue");
-
-            // Add audit columns to GIBS_EntityValue table
-            migrationBuilder.AddColumn<string>(
-                name: "CreatedBy",
-                table: tableName,
-                maxLength: 256,
-                nullable: true);
-
-            migrationBuilder.AddColumn<System.DateTime>(
-                name: "CreatedOn",
-                table: tableName,
-                nullable: false,
-                defaultValue: System.DateTime.UtcNow);
-
-            migrationBuilder.AddColumn<string>(
-                name: "ModifiedBy",
-                table: tableName,
-                maxLength: 256,
-                nullable: true);
-
-            migrationBuilder.AddColumn<System.DateTime>(
-                name: "ModifiedOn",
-                table: tableName,
-                nullable: false,
-                defaultValue: System.DateTime.UtcNow);
+            // No-op: audit columns are part of EntityValue table creation in 01.00.06.00.
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            string tableName = ActiveDatabase.RewriteName("GIBS_EntityValue");
-
-            migrationBuilder.DropColumn(
-                name: "ModifiedOn",
-                table: tableName);
-
-            migrationBuilder.DropColumn(
-                name: "ModifiedBy",
-                table: tableName);
-
-            migrationBuilder.DropColumn(
-                name: "CreatedOn",
-                table: tableName);
-
-            migrationBuilder.DropColumn(
-                name: "CreatedBy",
-                table: tableName);
+            // No-op: audit columns are removed with table drop in 01.00.06.00.
         }
     }
 }

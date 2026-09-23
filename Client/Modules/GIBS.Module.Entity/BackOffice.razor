@@ -139,12 +139,9 @@
                 <div class="card">
                     <div class="card-body py-3">
                         <label class="form-label mb-2 fw-bold">@Localizer["SelectEntityType"]</label>
-                        <select class="form-select" @bind="_selectedEntityTypeId">
+                        <select id="entitytypeid" class="form-select" @bind="@_selectedEntityTypeId" @bind:after="OnEntityTypeChanged" required>
                             <option value="0">-- @Localizer["SelectOne"] --</option>
-                            @foreach (var entityType in _entityTypes)
-                            {
-                                <option value="@entityType.EntityTypeId">@entityType.Name</option>
-                            }
+                            @RenderEntityTypeOptions(_entityTypeTree, 0)
                         </select>
                     </div>
                 </div>
@@ -376,6 +373,7 @@
     private int _fieldGroupCount = 0;
     private int _entityCount = 0;
     private List<EntityType> _entityTypes = new();
+    private List<EntityType> _entityTypeTree = new();
     private List<Entity> _entities = new();
     private Dictionary<int, int> _fieldCounts = new();
     private Dictionary<int, List<EntityFieldGroup>> _fieldGroupsByEntityType = new();
@@ -391,6 +389,7 @@
             // Load statistics
             _entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
             _entityTypeCount = _entityTypes.Count;
+            _entityTypeTree = BuildEntityTypeTree(_entityTypes);
             _selectedEntityTypeId = _entityTypes.FirstOrDefault()?.EntityTypeId ?? 0;
 
             // Load field groups count and cache by entity type
@@ -426,4 +425,64 @@
             _isLoading = false;
         }
     }
+
+    private Task OnEntityTypeChanged()
+    {
+        return Task.CompletedTask;
+    }
+
+    private List<EntityType> BuildEntityTypeTree(List<EntityType> flatList)
+    {
+        foreach (var item in flatList)
+        {
+            item.Children = new List<EntityType>();
+        }
+
+        var lookup = flatList.ToDictionary(x => x.EntityTypeId);
+        var rootItems = new List<EntityType>();
+
+        foreach (var item in flatList)
+        {
+            if (item.ParentEntityTypeId == null || !lookup.ContainsKey(item.ParentEntityTypeId.Value))
+            {
+                rootItems.Add(item);
+            }
+            else
+            {
+                lookup[item.ParentEntityTypeId.Value].Children.Add(item);
+            }
+        }
+
+        SortEntityTypes(rootItems);
+        return rootItems;
+    }
+
+    private void SortEntityTypes(List<EntityType> items)
+    {
+        items.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
+        foreach (var item in items)
+        {
+            if (item.Children != null && item.Children.Count > 0)
+            {
+                SortEntityTypes(item.Children);
+            }
+        }
+    }
+
+    private RenderFragment RenderEntityTypeOptions(IEnumerable<EntityType> items, int level = 0) => builder =>
+    {
+        int seq = 0;
+        foreach (var item in items)
+        {
+            builder.OpenElement(seq++, "option");
+            builder.AddAttribute(seq++, "value", item.EntityTypeId);
+            builder.AddContent(seq++, new string('\u00A0', level * 4) + item.Name);
+            builder.CloseElement();
+
+            if (item.Children != null && item.Children.Count > 0)
+            {
+                builder.AddContent(seq++, RenderEntityTypeOptions(item.Children, level + 1));
+            }
+        }
+    };
 }

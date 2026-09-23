@@ -112,11 +112,6 @@ namespace GIBS.Module.Entity.Models
         public bool IsSortable { get; set; }
 
         /// <summary>
-        /// Highlight this field in featured views
-        /// </summary>
-        public bool IsFeatured { get; set; }
-
-        /// <summary>
         /// Include this field in list/grid displays
         /// </summary>
         public bool IsListed { get; set; }

@@ -87,7 +87,7 @@
                 {
                     _customFieldBoolValues[customField.FieldId] = false;
                 }
-                <div class="row mb-1 align-items-center" @key="customField.FieldId">
+                <div class="row mb-1 align-items-start" @key="customField.FieldId">
                     @if (!customField.IsCaptionHidden)
                     {
                         <Label Class="col-sm-3" For="@($"cf_{customField.FieldId}")" HelpText="@customField.HelpText" ResourceKey="@customField.Key">@(string.IsNullOrWhiteSpace(customField.Label) ? customField.Name : customField.Label): </Label>
@@ -122,7 +122,7 @@
                                 }
                             </select>
                         }
-                        else if (customField.EditorType == EntityEditorType.MultiSelect)
+                        else if (customField.EditorType == EntityEditorType.MultiSelect || customField.EditorType == EntityEditorType.CheckboxList)
                         {
                             var options = GetFieldOptions(customField.FieldId);
                             <div class="mt-2">

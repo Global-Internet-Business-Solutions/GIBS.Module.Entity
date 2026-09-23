@@ -36,7 +36,7 @@
 
 
     <div class="row align-items-center">
-        <div class="col-md-9 align-self-start" style="border: 2px solid #ff5733; padding: 1rem;">
+        <div class="col-md-9 align-self-start" style="border: 0px solid #ff5733; padding: 1rem;">
             @if (_showDetail && _recordDetails != null && _detailTemplate != null)
             {
                 var detailValues = _recordDetailValuesMap.ContainsKey(_recordDetails.EntityId)
@@ -60,6 +60,28 @@
             }
             else if (_showListing)
             {
+                @if (_sortingOptions.Any())
+                {
+                    <form method="get" action="@BuildCurrentPageUrl()" class="mb-3 d-flex justify-content-end gap-2">
+                        <input type="hidden" name="type" value="@_selectedEntityTypeKey" />
+                        <div>
+                            <label class="me-2">Sort By:</label>
+                            <select name="sortby" class="form-select d-inline-block w-auto" onchange="this.form.submit()">
+                                @foreach (var option in _sortingOptions)
+                                {
+                                    <option value="@option.Key" selected="@string.Equals(_selectedSortFieldKey, option.Key, StringComparison.OrdinalIgnoreCase)">@option.Label</option>
+                                }
+                            </select>
+                        </div>
+                        <div>
+                            <select name="sortdir" class="form-select d-inline-block w-auto" onchange="this.form.submit()">
+                                <option value="Ascending" selected="@string.Equals(_selectedSortDirection, "Ascending", StringComparison.OrdinalIgnoreCase)">Ascending</option>
+                                <option value="Descending" selected="@string.Equals(_selectedSortDirection, "Descending", StringComparison.OrdinalIgnoreCase)">Descending</option>
+                            </select>
+                        </div>
+                    </form>
+                }
+
                 @if (_listingRecords != null && _listingRecords.Any())
                 {
                     @if (!string.IsNullOrEmpty(_listingTemplate?.Header))
@@ -144,7 +166,7 @@
                 }
             }
         </div>
-        <div class="col-md-3 align-self-start" style="border: 2px solid #ff5733; padding: 1rem;">
+        <div class="col-md-3 align-self-start" style="border: 0px solid #ff5733; padding: 1rem;">
             @if (_entityTypeTree.Any())
             {
                 <nav class="entitytype-nav" aria-label="Browse by Entity Type">
@@ -167,13 +189,16 @@
     public override string RenderMode => RenderModes.Static;
     public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.View;
     public override bool UseAdminContainer => false;
+    public override string Title => _pageTitle;
 
     private bool _isLoading = true;
     private string _customTitle;
+    private string _pageTitle = string.Empty;
     private bool _enableFeatured;
     private bool _showDetail;
     private bool _showListing;
     private string _selectedEntityTypeName;
+    private string _selectedEntityTypeKey;
     private Entity _recordDetails;
     private EntityTemplate _detailTemplate;
     private Dictionary<int, List<EntityValue>> _recordDetailValuesMap = new();
@@ -189,6 +214,9 @@
     private Dictionary<int, List<EntityValue>> _listingEntityValuesMap = new();
     private List<EntityType> _entityTypeTree = new();
     private Dictionary<int, EntityType> _entityTypeLookup = new();
+    private List<(string Key, string Label)> _sortingOptions = new();
+    private string _selectedSortFieldKey = "LastModified";
+    private string _selectedSortDirection = "Ascending";
 
     // Cache for featured data - persists across component instances
     private static readonly Dictionary<string, FeaturedDataCache> _cache = new();
@@ -232,6 +260,7 @@
            _isLoading = true;
 
             _customTitle = SettingService.GetSetting(ModuleState.Settings, "CustomTitle", "");
+            _pageTitle = _customTitle;
             _enableFeatured = bool.TryParse(SettingService.GetSetting(ModuleState.Settings, "EnableFeatured", "true"), out var enableFeatured) && enableFeatured;
 
             var entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
@@ -257,6 +286,16 @@
                     if (selectedEntityType != null)
                     {
                         _selectedEntityTypeName = selectedEntityType.Name;
+                        _selectedEntityTypeKey = selectedEntityType.Key;
+
+                        var requestedSortBy = GetQueryValue("sortby");
+                        _selectedSortFieldKey = string.IsNullOrWhiteSpace(requestedSortBy) ? "LastModified" : requestedSortBy;
+
+                        var requestedSortDirection = GetQueryValue("sortdir");
+                        _selectedSortDirection = string.Equals(requestedSortDirection, "Descending", StringComparison.OrdinalIgnoreCase)
+                            ? "Descending"
+                            : "Ascending";
+
                         await LoadListingRecordsAsync(selectedEntityType.EntityTypeId, allEntityTypes);
                     }
                 }
@@ -296,6 +335,8 @@
                         EntityValuesMap = new Dictionary<int, List<EntityValue>>(_entityValuesMap)
                     };
                 }
+
+                ApplyFeaturedPageTitle();
             }
 
 
@@ -359,6 +400,30 @@
         }
     }
 
+    private void ApplyFeaturedPageTitle()
+    {
+        if (string.IsNullOrWhiteSpace(_featuredTemplate?.PageTitle))
+        {
+            return;
+        }
+
+        if (_featuredRecords.Any())
+        {
+            var featuredRecord = _featuredRecords.First();
+            var featuredValues = _entityValuesMap.TryGetValue(featuredRecord.EntityId, out var values)
+                ? values
+                : new List<EntityValue>();
+
+            _pageTitle = TemplateEngine.Render(_featuredTemplate.PageTitle, featuredRecord, _entityFields, featuredValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups);
+        }
+        else
+        {
+            _pageTitle = _featuredTemplate.PageTitle;
+        }
+
+        SetPageTitle(_pageTitle);
+    }
+
     private async Task LoadRecordDetailsAsync(string detailKey)
     {
         try
@@ -385,6 +450,16 @@
                 _entityFields = templateData.Fields;
                 _entityFieldGroups = templateData.FieldGroups;
                 _recordDetailValuesMap = templateData.EntityValuesMap;
+
+                if (!string.IsNullOrWhiteSpace(_detailTemplate.PageTitle))
+                {
+                    var detailValues = _recordDetailValuesMap.TryGetValue(_recordDetails.EntityId, out var values)
+                        ? values
+                        : new List<EntityValue>();
+
+                    _pageTitle = TemplateEngine.Render(_detailTemplate.PageTitle, _recordDetails, _entityFields, detailValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups);
+                    SetPageTitle(_pageTitle);
+                }
             }
         }
         catch (Exception ex)
@@ -409,6 +484,12 @@
                 .ToList();
             _listingTemplate = ResolveTemplate(_listingTemplates, "Listing", entityTypeId);
 
+            if (!string.IsNullOrWhiteSpace(_listingTemplate?.PageTitle))
+            {
+                _pageTitle = RenderTemplateSection(_listingTemplate.PageTitle);
+                SetPageTitle(_pageTitle);
+            }
+
             if (!_listingTemplates.Any())
             {
                 return;
@@ -427,6 +508,12 @@
                 _entityFields = templateData.Fields;
                 _entityFieldGroups = templateData.FieldGroups;
                 _listingEntityValuesMap = templateData.EntityValuesMap;
+                BuildSortingOptions();
+                ApplyListingSort();
+            }
+            else
+            {
+                _sortingOptions.Clear();
             }
         }
         catch (Exception ex)
@@ -493,6 +580,108 @@
         return templateContent
             .Replace("[Type]", typeName, StringComparison.Ordinal)
             .Replace("[Type}", typeName, StringComparison.Ordinal);
+    }
+
+    private void BuildSortingOptions()
+    {
+        _sortingOptions = new List<(string Key, string Label)>
+        {
+            ("LastModified", "Last Modified"),
+            ("PublishDate", "Publish Date")
+        };
+
+        var sortableFields = (_entityFields ?? new List<EntityField>())
+            .Where(f => f.IsEnabled && f.IsSortable && !string.IsNullOrWhiteSpace(f.Key))
+            .GroupBy(f => f.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .OrderBy(f => f.Name)
+            .ToList();
+
+        foreach (var field in sortableFields)
+        {
+            var label = string.IsNullOrWhiteSpace(field.Name) ? field.Key : field.Name;
+            _sortingOptions.Add((field.Key, label));
+        }
+
+        if (!_sortingOptions.Any(x => string.Equals(x.Key, _selectedSortFieldKey, StringComparison.OrdinalIgnoreCase)))
+        {
+            _selectedSortFieldKey = "LastModified";
+        }
+    }
+
+    private void ApplyListingSort()
+    {
+        IEnumerable<Entity> query = _listingRecords ?? Enumerable.Empty<Entity>();
+        var ascending = string.Equals(_selectedSortDirection, "Ascending", StringComparison.OrdinalIgnoreCase);
+
+        if (string.Equals(_selectedSortFieldKey, "LastModified", StringComparison.OrdinalIgnoreCase))
+        {
+            query = ascending
+                ? query.OrderBy(e => e.ModifiedOn).ThenBy(e => e.SortOrder)
+                : query.OrderByDescending(e => e.ModifiedOn).ThenBy(e => e.SortOrder);
+        }
+        else if (string.Equals(_selectedSortFieldKey, "PublishDate", StringComparison.OrdinalIgnoreCase))
+        {
+            query = ascending
+                ? query.OrderBy(e => e.PublishStartDate ?? DateTime.MinValue).ThenBy(e => e.SortOrder)
+                : query.OrderByDescending(e => e.PublishStartDate ?? DateTime.MinValue).ThenBy(e => e.SortOrder);
+        }
+        else
+        {
+            query = SortByFieldValue(query, _selectedSortFieldKey, ascending);
+        }
+
+        _listingRecords = query.ToList();
+    }
+
+    private IEnumerable<Entity> SortByFieldValue(IEnumerable<Entity> source, string fieldKey, bool ascending)
+    {
+        if (string.IsNullOrWhiteSpace(fieldKey))
+        {
+            return source;
+        }
+
+        var field = (_entityFields ?? new List<EntityField>())
+            .FirstOrDefault(f => string.Equals(f.Key, fieldKey, StringComparison.OrdinalIgnoreCase));
+
+        if (field == null)
+        {
+            return source;
+        }
+
+        var valueSelector = new Func<Entity, IComparable>(entity =>
+        {
+            if (_listingEntityValuesMap.TryGetValue(entity.EntityId, out var values))
+            {
+                var match = (values ?? new List<EntityValue>())
+                    .Where(v => v.FieldId == field.FieldId)
+                    .OrderBy(v => v.ValueIndex)
+                    .FirstOrDefault();
+
+                return GetSortableValue(match, field.DataType);
+            }
+
+            return GetSortableValue(null, field.DataType);
+        });
+
+        return ascending
+            ? source.OrderBy(valueSelector).ThenBy(entity => entity.SortOrder)
+            : source.OrderByDescending(valueSelector).ThenBy(entity => entity.SortOrder);
+    }
+
+    private static IComparable GetSortableValue(EntityValue value, Enums.EntityDataType dataType)
+    {
+        return dataType switch
+        {
+            Enums.EntityDataType.Integer => value?.IntegerValue ?? int.MinValue,
+            Enums.EntityDataType.Long => value?.LongValue ?? long.MinValue,
+            Enums.EntityDataType.Decimal => value?.DecimalValue ?? decimal.MinValue,
+            Enums.EntityDataType.Boolean => value?.BooleanValue ?? false,
+            Enums.EntityDataType.Date => value?.DateValue ?? DateTime.MinValue,
+            Enums.EntityDataType.DateTime => value?.DateTimeValue ?? DateTime.MinValue,
+            Enums.EntityDataType.Guid => value?.GuidValue?.ToString() ?? string.Empty,
+            _ => value?.TextValue ?? string.Empty
+        };
     }
 
     private EntityTemplate ResolveTemplate(IEnumerable<EntityTemplate> templates, string templateType, int? entityTypeId)

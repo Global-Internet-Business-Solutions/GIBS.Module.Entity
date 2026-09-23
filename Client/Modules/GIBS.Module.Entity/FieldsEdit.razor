@@ -15,8 +15,7 @@
 
 <form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
     <div class="container">
-        <input type="color" id="moduleColor" @bind="selectedColor" />
-        <p>Selected HEX: @selectedColor</p>
+      
         <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="name" HelpText="Internal name of the field" ResourceKey="Name">Name:</Label>
             <div class="col-sm-9">
@@ -220,15 +219,6 @@
             </div>
         </div>
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="isfeatured" HelpText="Highlight this field in featured views" ResourceKey="Featured">Featured?</Label>
-            <div class="col-sm-9">
-                <select id="isfeatured" class="form-select" @bind="@_isFeatured">
-                    <option value="True">@Localizer["Yes"]</option>
-                    <option value="False">@Localizer["No"]</option>
-                </select>
-            </div>
-        </div>
-        <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="islisted" HelpText="Include this field in list/grid displays" ResourceKey="Listed">Listed?</Label>
             <div class="col-sm-9">
                 <select id="islisted" class="form-select" @bind="@_isListed">
@@ -316,7 +306,7 @@
     
     private ElementReference form;
     private bool validated = false;
-    private string selectedColor = "#c0c0c0";
+   
     private int _fieldId = -1;
     private int _entityTypeId;
     private string _name = string.Empty;
@@ -334,7 +324,6 @@
     private int _sortOrder = 0;
     private string _isRequired = "False";
     private string _isReadOnly = "False";
-    private string _isFeatured = "False";
     private string _isListed = "False";
     private string _isManagerOnly = "False";
     private string _isCaptionHidden = "False";
@@ -396,7 +385,6 @@
                     _sortOrder = field.SortOrder;
                     _isRequired = field.IsRequired.ToString();
                     _isReadOnly = field.IsReadOnly.ToString();
-                    _isFeatured = field.IsFeatured.ToString();
                     _isListed = field.IsListed.ToString();
                     _isManagerOnly = field.IsManagerOnly.ToString();
                     _isCaptionHidden = field.IsCaptionHidden.ToString();
@@ -605,7 +593,6 @@
                 field.SortOrder = _sortOrder;
                 field.IsRequired = bool.Parse(_isRequired);
                 field.IsReadOnly = bool.Parse(_isReadOnly);
-                field.IsFeatured = bool.Parse(_isFeatured);
                 field.IsListed = bool.Parse(_isListed);
                 field.IsManagerOnly = bool.Parse(_isManagerOnly);
                 field.IsCaptionHidden = bool.Parse(_isCaptionHidden);
