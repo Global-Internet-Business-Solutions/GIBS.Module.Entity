@@ -19,11 +19,11 @@
             <p class="text-muted">@Localizer["BackOffice_Description"]</p>
            <div class="d-flex justify-content-between">
                <NavLink class="btn btn-secondary" href="@NavigateUrl()">
-                   <i class="oi oi-arrow-left"></i> @Localizer["BackToEntities"]
+                   <i class="oi oi-arrow-left"></i> @Localizer["BackToSite"]
                </NavLink>
                <div>
                <ActionLink Action="TemplatesIndex" Class="btn btn-outline-secondary" Text="Templates" Security="SecurityAccessLevel.Edit" ResourceKey="ManageTemplates" />
-               <ActionLink Action="Add" Security="SecurityAccessLevel.Edit" Text="Add Entity" Class="btn btn-success" ResourceKey="Add" />
+                    <ActionLink Action="Add" Security="SecurityAccessLevel.Edit" Text="Add Entity" Class="btn btn-warning" ResourceKey="Add" />
                </div>
            </div>
         </div>
@@ -88,12 +88,23 @@
                     </div>
                     <div class="card-body">
                         <p class="card-text">@Localizer["EntityTypes_Description"]</p>
-                        <ul class="list-unstyled">
-                            @foreach (var entityType in _entityTypes.Take(3))
-                            {
-                                <li><i class="oi oi-check text-success"></i> @entityType.Name (@entityType.Key)</li>
-                            }
-                        </ul>
+                        @if (_entityTypePagerItems.Any())
+                        {
+                            <Pager Items="@_entityTypePagerItems" PageSize="5" Class="table table-striped">
+                                <Header>
+                                    <th style="width: 1px;">&nbsp;</th>
+                                    <th>@Localizer["Name"]</th>
+                                    <th>@Localizer["Key"]</th>
+                                    <th>@Localizer["SortOrder"]</th>
+                                </Header>
+                                <Row>
+                                    <td><ActionLink Action="EntityTypesEdit" Parameters="@($"id={context.EntityType.EntityTypeId}")" IconName="oi oi-pencil" IconOnly="true" Class="btn btn-sm btn-outline-primary" ResourceKey="Edit" /></td>
+                                    <td>@GetEntityTypeDisplayName(context)</td>
+                                    <td><code>@context.EntityType.Key</code></td>
+                                    <td>@context.EntityType.SortOrder</td>
+                                </Row>
+                            </Pager>
+                        }
                     </div>
                     <div class="card-footer">
                         <ActionLink Action="EntityTypesIndex" Class="btn btn-primary" Text="@Localizer["Manage"]" Security="SecurityAccessLevel.Edit" ResourceKey="ManageEntityTypes" />
@@ -112,12 +123,18 @@
                         <p class="card-text">@Localizer["EntityRecordDescription"]</p>
                         @if (_entities.Any())
                         {
-                            <ul class="list-unstyled">
-                                @foreach (var entity in _entities.Take(3))
-                                {
-                                    <li><i class="oi oi-check text-success"></i> @entity.Name</li>
-                                }
-                            </ul>
+                            <Pager Items="@_entities" PageSize="5" Class="table table-striped">
+                                <Header>
+                                    <th style="width: 1px;">&nbsp;</th>
+                                    <th>@Localizer["Name"]</th>
+                                    <th>@Localizer["DateCreated"]</th>
+                                </Header>
+                                <Row>
+                                    <td><ActionLink Action="Edit" Parameters="@($"id={context.EntityId}")" IconName="oi oi-pencil" IconOnly="true" Class="btn btn-sm btn-outline-warning" ResourceKey="Edit" /></td>
+                                    <td>@context.Name</td>
+                                    <td>@context.CreatedOn</td>
+                                </Row>
+                            </Pager>
                         }
                         else
                         {
@@ -160,17 +177,23 @@
                         @if (_selectedEntityTypeId > 0)
                         {
                             var selectedFieldGroups = _fieldGroupsByEntityType.ContainsKey(_selectedEntityTypeId)
-                                ? _fieldGroupsByEntityType[_selectedEntityTypeId].Take(3).ToList()
+                                ? _fieldGroupsByEntityType[_selectedEntityTypeId]
                                 : new List<EntityFieldGroup>();
 
                             if (selectedFieldGroups.Any())
                             {
-                                <ul class="list-unstyled">
-                                    @foreach (var group in selectedFieldGroups)
-                                    {
-                                        <li><i class="oi oi-check text-success"></i> @group.Name (@group.Key)</li>
-                                    }
-                                </ul>
+                                <Pager Items="@selectedFieldGroups" PageSize="5" Class="table table-striped">
+                                    <Header>
+                                        <th style="width: 1px;">&nbsp;</th>
+                                        <th>@Localizer["Name"]</th>
+                                        <th>@Localizer["Key"]</th>
+                                    </Header>
+                                    <Row>
+                                        <td><ActionLink Action="FieldGroupsEdit" Parameters="@($"id={context.FieldGroupId}&entitytypeid={_selectedEntityTypeId}")" IconName="oi oi-pencil" IconOnly="true" Class="btn btn-sm btn-outline-info" ResourceKey="Edit" /></td>
+                                        <td>@context.Name</td>
+                                        <td><code>@context.Key</code></td>
+                                    </Row>
+                                </Pager>
                             }
                             else
                             {
@@ -211,21 +234,29 @@
                         @if (_selectedEntityTypeId > 0)
                         {
                             var selectedFields = _fieldsByEntityType.ContainsKey(_selectedEntityTypeId)
-                                ? _fieldsByEntityType[_selectedEntityTypeId].Take(3).ToList()
+                                ? _fieldsByEntityType[_selectedEntityTypeId]
                                 : new List<EntityField>();
 
                             if (selectedFields.Any())
                             {
-                                <ul class="list-unstyled">
-                                    @foreach (var field in selectedFields)
-                                    {
-                                        <li><i class="oi oi-check text-success"></i> @field.Name (@field.Key)</li>
-                                    }
-                                </ul>
+                                <Pager Items="@selectedFields" PageSize="5" Class="table table-striped">
+                                    <Header>
+                                        <th style="width: 1px;">&nbsp;</th>
+                                        <th>@Localizer["Name"]</th>
+                                        <th>@Localizer["Key"]</th>
+                                    </Header>
+                                    <Row>
+                                        <td><ActionLink Action="FieldsEdit" Parameters="@($"id={context.FieldId}&entitytypeid={_selectedEntityTypeId}")" IconName="oi oi-pencil" IconOnly="true" Class="btn btn-sm btn-outline-success" ResourceKey="Edit" /></td>
+                                        <td>@context.Name</td>
+                                        <td><code>@context.Key</code></td>
+                                    </Row>
+                                </Pager>
                             }
                             else
                             {
-                                <div class="text-muted">ADD GRID WITH CUSTOM FIELDS</div>
+                                <div class="alert alert-light mb-0" role="alert">
+                                    @Localizer["Message.DisplayNone"]
+                                </div>
                             }
                         }
                         else
@@ -374,6 +405,7 @@
     private int _entityCount = 0;
     private List<EntityType> _entityTypes = new();
     private List<EntityType> _entityTypeTree = new();
+    private List<EntityTypePagerItem> _entityTypePagerItems = new();
     private List<Entity> _entities = new();
     private Dictionary<int, int> _fieldCounts = new();
     private Dictionary<int, List<EntityFieldGroup>> _fieldGroupsByEntityType = new();
@@ -390,6 +422,7 @@
             _entityTypes = await EntityTypeService.GetEntityTypesAsync(PageState.Site.SiteId, ModuleState.ModuleId);
             _entityTypeCount = _entityTypes.Count;
             _entityTypeTree = BuildEntityTypeTree(_entityTypes);
+            _entityTypePagerItems = FlattenEntityTypeTree(_entityTypeTree);
             _selectedEntityTypeId = _entityTypes.FirstOrDefault()?.EntityTypeId ?? 0;
 
             // Load field groups count and cache by entity type
@@ -412,7 +445,9 @@
             }
 
             // Load entities count
-            _entities = await EntityService.GetEntitysAsync(ModuleState.ModuleId);
+            _entities = (await EntityService.GetEntitysAsync(ModuleState.ModuleId) ?? new List<Entity>())
+                .OrderByDescending(x => x.CreatedOn)
+                .ToList();
             _entityCount = _entities.Count;
         }
         catch (Exception ex)
@@ -467,6 +502,43 @@
                 SortEntityTypes(item.Children);
             }
         }
+    }
+
+    private List<EntityTypePagerItem> FlattenEntityTypeTree(IEnumerable<EntityType> items, int level = 0)
+    {
+        var result = new List<EntityTypePagerItem>();
+        foreach (var item in items.OrderBy(x => x.SortOrder))
+        {
+            result.Add(new EntityTypePagerItem
+            {
+                EntityType = item,
+                Level = level
+            });
+
+            if (item.Children != null && item.Children.Count > 0)
+            {
+                result.AddRange(FlattenEntityTypeTree(item.Children, level + 1));
+            }
+        }
+
+        return result;
+    }
+
+    private string GetEntityTypeDisplayName(EntityTypePagerItem item)
+    {
+        if (item == null || item.EntityType == null)
+        {
+            return string.Empty;
+        }
+
+        var prefix = item.Level > 0 ? string.Concat(Enumerable.Repeat("— ", item.Level)) : string.Empty;
+        return $"{prefix}{item.EntityType.Name}";
+    }
+
+    private sealed class EntityTypePagerItem
+    {
+        public EntityType EntityType { get; set; }
+        public int Level { get; set; }
     }
 
     private RenderFragment RenderEntityTypeOptions(IEnumerable<EntityType> items, int level = 0) => builder =>

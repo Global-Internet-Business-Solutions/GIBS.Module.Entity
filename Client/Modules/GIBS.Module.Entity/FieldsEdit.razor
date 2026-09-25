@@ -41,6 +41,17 @@
             </div>
         </div>
         <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="editortype" HelpText="UI editor type" ResourceKey="EditorType">Editor Type:</Label>
+            <div class="col-sm-9">
+                <select id="editortype" class="form-select" value="@_editorType" @onchange="OnEditorTypeChanged" required>
+                    @foreach (var et in Enum.GetValues<EntityEditorType>())
+                    {
+                        <option value="@et">@et</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="datatype" HelpText="Data type for storage" ResourceKey="DataType">Data Type:</Label>
             <div class="col-sm-9">
                 <select id="datatype" class="form-select" @bind="@_dataType" required>
@@ -51,15 +62,6 @@
                 </select>
             </div>
         </div>
-        <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="editortype" HelpText="UI editor type" ResourceKey="EditorType">Editor Type:</Label>
-            <div class="col-sm-9">
-                <select id="editortype" class="form-select" @bind="@_editorType" required>
-                    @foreach (var et in Enum.GetValues<EntityEditorType>())
-                    {
-                        <option value="@et">@et</option>
-                    }
-                </select>
         @if (_fieldId > 0 && ShowOptionsManager)
         {
             <hr />
@@ -143,11 +145,6 @@
                 <p>@Localizer["Message.DisplayNone"]</p>
             }
         }
-
-            </div>
-        </div>
-
-
 
         <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="fieldgroupid" HelpText="Optional field group" ResourceKey="FieldGroup">Field Group:</Label>
@@ -292,7 +289,7 @@
         </div>
         <br /><br />
         <button type="button" class="btn btn-success" @onclick="SaveField">@Localizer["Save"]</button>
-        <NavLink class="btn btn-secondary" href="@NavigateUrl("FieldsIndex", $"entitytypeid={_entityTypeId}")">@Localizer["Cancel"]</NavLink>
+        <NavLink class="btn btn-secondary" href="@NavigateUrl(ModuleState.ModuleId, "FieldsIndex", $"entitytypeid={_entityTypeId}")">@Localizer["Cancel"]</NavLink>
 
         <br /><br />
         <AuditInfo CreatedBy="@_createdBy" CreatedOn="@_createdOn" ModifiedBy="@_modifiedBy" ModifiedOn="@_modifiedOn"></AuditInfo>
@@ -410,6 +407,31 @@
     }
 
     private bool ShowOptionsManager => IsSelectStyleEditor(_editorType);
+
+    private void OnEditorTypeChanged(ChangeEventArgs args)
+    {
+        _editorType = args.Value?.ToString() ?? EntityEditorType.TextBox.ToString();
+        _dataType = GetDefaultDataTypeForEditorType(_editorType);
+    }
+
+    private static string GetDefaultDataTypeForEditorType(string editorType)
+    {
+        if (!Enum.TryParse<EntityEditorType>(editorType, true, out var parsedEditorType))
+        {
+            return EntityDataType.String.ToString();
+        }
+
+        return parsedEditorType switch
+        {
+            EntityEditorType.Number => EntityDataType.Decimal.ToString(),
+            EntityEditorType.Currency => EntityDataType.Decimal.ToString(),
+            EntityEditorType.Checkbox => EntityDataType.Boolean.ToString(),
+            EntityEditorType.Toggle => EntityDataType.Boolean.ToString(),
+            EntityEditorType.DatePicker => EntityDataType.Date.ToString(),
+            EntityEditorType.DateTimePicker => EntityDataType.DateTime.ToString(),
+            _ => EntityDataType.String.ToString()
+        };
+    }
 
     private static bool IsSelectStyleEditor(string editorType)
     {

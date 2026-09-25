@@ -16,7 +16,7 @@
             <h2>@Localizer["BackOffice_Title"]</h2>
             <p class="text-muted">@Localizer["BackOffice_Description"]</p>
            <div class="d-flex justify-content-between">
-               <NavLink class="btn btn-secondary" href="@NavigateUrl()">
+               <NavLink class="btn btn-secondary" href="@NavigateUrl(ModuleState.ModuleId,"BackOffice")">
                    <i class="oi oi-arrow-left"></i> @Localizer["Return"]
                </NavLink>
                <ActionLink Action="Add" Security="SecurityAccessLevel.Edit" Text="Add Entity" Class="btn btn-success" ResourceKey="Add" />

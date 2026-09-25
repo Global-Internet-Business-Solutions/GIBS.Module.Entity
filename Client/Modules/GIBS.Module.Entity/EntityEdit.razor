@@ -156,6 +156,36 @@
                         {
                             <input id="@($"cf_{customField.FieldId}")" type="number" class="form-control" @bind="@_customFieldValues[customField.FieldId]" />
                         }
+                        else if (customField.EditorType == EntityEditorType.FileUpload)
+                        {
+                            <div>
+                                <div class="form-group mb-2">
+                                    <label>@customField.Label</label>
+
+                                    @if (_currentImageFieldId == 0 || _currentImageFieldId == customField.FieldId)
+                                    {
+                                        <FileManager UploadMultiple="false"
+                                                     FolderId="@_fileFolderId"
+                                                     ShowSuccess="false" ShowFolders="false" ShowFiles="false" ShowImage="false" ShowUpload="true"
+                                                     OnUpload="@(async (fileId) => await HandleFileUploadAsync(fileId, customField.FieldId))" />
+                                    }
+
+                                    @{
+                                        var filePaths = GetAllImagePathsFromField(customField.FieldId);
+                                    }
+
+                                    @if (filePaths.Count > 0)
+                                    {
+                                        <ul class="list-unstyled mb-0 mt-2">
+                                            @foreach (var filePath in filePaths)
+                                            {
+                                                <li><a href="@filePath" target="_blank">@filePath</a></li>
+                                            }
+                                        </ul>
+                                    }
+                                </div>
+                            </div>
+                        }
                         else if (customField.EditorType == EntityEditorType.ImageUpload)
                         {
                             <div>
@@ -1376,9 +1406,9 @@
                         entitiesToSave.Add(entityValue);
                     }
                 }
-                else if (field.EditorType == EntityEditorType.ImageUpload)
+                else if (field.EditorType == EntityEditorType.ImageUpload || field.EditorType == EntityEditorType.FileUpload)
                 {
-                    // Explicitly handle ImageUpload fields - supports both single and multiple images
+                    // Explicitly handle ImageUpload/FileUpload fields - supports both single and multiple files
                     // For multi-value fields, we store an array of JSON objects: [{"fileId":1,...}, {"fileId":2,...}]
                     // For single-value fields, we store a single JSON object: {"fileId":1,...}
                     await logger.LogInformation($"ImageUpload field {field.FieldId}: Raw value = '{stringValue}'");
@@ -1920,7 +1950,7 @@
             await logger.LogInformation($"✓ StateHasChanged() called");
             await logger.LogInformation($"=== HandleFileUploadAsync END (SUCCESS) ===");
 
-            AddModuleMessage("Image uploaded successfully.", MessageType.Success);
+            AddModuleMessage("File uploaded successfully.", MessageType.Success);
         }
         catch (Exception ex)
         {

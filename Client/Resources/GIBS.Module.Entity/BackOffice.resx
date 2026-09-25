@@ -118,12 +118,12 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="BackOffice_Description" xml:space="preserve">
-    <value>Entity Management</value>
+    <value>Entity Builder Dashboard</value>
   </data>
   <data name="BackOffice_Title" xml:space="preserve">
     <value>BackOffice</value>
   </data>
-  <data name="BackToEntities" xml:space="preserve">
+  <data name="BackToSite" xml:space="preserve">
     <value>Return</value>
   </data>
   <data name="CardEntities" xml:space="preserve">
@@ -161,5 +161,8 @@
   </data>
   <data name="SelectEntityType" xml:space="preserve">
     <value>Select Entity Type to Manage:</value>
+  </data>
+  <data name="AddNew" xml:space="preserve">
+    <value>Add New</value>
   </data>
 </root>

@@ -14,9 +14,12 @@ namespace GIBS.Module.Entity.Helpers
     /// Resolves token-based HTML templates for EntityType list, detail, search, and featured views.
     /// Supported tokens:
     ///   [Name]              - Entity.Name
+    ///   [Description]       - Entity.Description
     ///   [Key]               - Entity.Key
     ///   [Status]            - Entity.Status
+    ///   [IsFeatured]        - Entity.IsFeatured
     ///   [Type]              - Entity.EntityType.Name (or EntityTypeId fallback)
+    ///   [TypeDescription]   - Entity.EntityType.Description
     ///   [DateCreated]       - Entity.CreatedOn (default format)
     ///   [DateCreated:format] - Entity.CreatedOn with custom DateTime format
     ///   [DateModified]      - Entity.ModifiedOn (default format)
@@ -30,6 +33,8 @@ namespace GIBS.Module.Entity.Helpers
     ///   [HtmlContent:FieldKey] - raw HTML from the record value, or field-level HtmlContent when no record value exists
     ///   [ViewLink]...[/ViewLink] - hyperlink to current page with ?detail=Entity.Key and class="viewLink"
     ///   [Edit]              - edit hyperlink with pencil icon for current entity
+    ///   [HASFEATURED]...[/HASFEATURED] - shows block only when Entity.IsFeatured is true
+    ///   [HASNOTFEATURED]...[/HASNOTFEATURED] - shows block only when Entity.IsFeatured is false
     ///   [HASIMAGES]...[/HASIMAGES] - shows block only when the record has ImageUpload values
     ///   [HASNOIMAGES]...[/HASNOIMAGES] - shows block only when the record has no ImageUpload values
     /// </summary>
@@ -57,9 +62,12 @@ namespace GIBS.Module.Entity.Helpers
 
             // Standard tokens
             result.Replace("[Name]", entity.Name ?? string.Empty);
+            result.Replace("[Description]", entity.Description ?? string.Empty);
             result.Replace("[Key]", entity.Key ?? string.Empty);
             result.Replace("[Status]", entity.Status ?? string.Empty);
+            result.Replace("[IsFeatured]", entity.IsFeatured.ToString());
             result.Replace("[Type]", GetEntityTypeTokenValue(entity));
+            result.Replace("[TypeDescription]", GetEntityTypeDescriptionTokenValue(entity));
             ApplyDateToken(result, "DateCreated", entity.CreatedOn);
             ApplyDateToken(result, "DateModified", entity.ModifiedOn);
             result.Replace("[SortOrder]", entity.SortOrder.ToString());
@@ -69,6 +77,7 @@ namespace GIBS.Module.Entity.Helpers
                 field.EditorType == EntityEditorType.ImageUpload &&
                 customValues.TryGetValue(field.FieldId, out var value) &&
                 GetIndexedValues(value).Any(v => !string.IsNullOrWhiteSpace(v)));
+            ApplyFeaturedConditionalBlocks(result, entity.IsFeatured);
             ApplyImageConditionalBlocks(result, hasImages);
 
             // Custom field tokens
@@ -135,9 +144,12 @@ namespace GIBS.Module.Entity.Helpers
 
             // Standard tokens
             result.Replace("[Name]", entity.Name ?? string.Empty);
+            result.Replace("[Description]", entity.Description ?? string.Empty);
             result.Replace("[Key]", entity.Key ?? string.Empty);
             result.Replace("[Status]", entity.Status ?? string.Empty);
+            result.Replace("[IsFeatured]", entity.IsFeatured.ToString());
             result.Replace("[Type]", GetEntityTypeTokenValue(entity));
+            result.Replace("[TypeDescription]", GetEntityTypeDescriptionTokenValue(entity));
             ApplyDateToken(result, "DateCreated", entity.CreatedOn);
             ApplyDateToken(result, "DateModified", entity.ModifiedOn);
             result.Replace("[SortOrder]", entity.SortOrder.ToString());
@@ -147,6 +159,7 @@ namespace GIBS.Module.Entity.Helpers
                 field.EditorType == EntityEditorType.ImageUpload &&
                 customValueLists.TryGetValue(field.FieldId, out var values) &&
                 values.Any(v => !string.IsNullOrWhiteSpace(v)));
+            ApplyFeaturedConditionalBlocks(result, entity.IsFeatured);
             ApplyImageConditionalBlocks(result, hasImages);
 
             // Custom field tokens
@@ -541,6 +554,32 @@ namespace GIBS.Module.Entity.Helpers
             result.Append(replaced);
         }
 
+        private static void ApplyFeaturedConditionalBlocks(StringBuilder result, bool isFeatured)
+        {
+            if (result.Length == 0)
+            {
+                return;
+            }
+
+            var content = result.ToString();
+
+            content = Regex.Replace(content, @"\[HASFEATURED\](.*?)\[/HASFEATURED\]", match =>
+            {
+                return isFeatured ? match.Groups[1].Value : string.Empty;
+            }, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            content = Regex.Replace(content, @"\[HASNOTFEATURED\](.*?)\[/HASNOTFEATURED\]", match =>
+            {
+                return isFeatured ? string.Empty : match.Groups[1].Value;
+            }, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            content = Regex.Replace(content, @"\[/?HASFEATURED\]", string.Empty, RegexOptions.IgnoreCase);
+            content = Regex.Replace(content, @"\[/?HASNOTFEATURED\]", string.Empty, RegexOptions.IgnoreCase);
+
+            result.Clear();
+            result.Append(content);
+        }
+
         private static void ApplyImageConditionalBlocks(StringBuilder result, bool hasImages)
         {
             if (result.Length == 0)
@@ -581,6 +620,11 @@ namespace GIBS.Module.Entity.Helpers
             }
 
             return entity.EntityTypeId > 0 ? entity.EntityTypeId.ToString() : string.Empty;
+        }
+
+        private static string GetEntityTypeDescriptionTokenValue(Models.Entity entity)
+        {
+            return entity.EntityType?.Description ?? string.Empty;
         }
 
         private static void ApplyDateToken(StringBuilder result, string tokenName, System.DateTime value)
