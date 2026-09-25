@@ -12,6 +12,7 @@ namespace GIBS.Module.Entity.Repository
         IEnumerable<EntityField> GetFieldsByGroup(int fieldGroupId);
         EntityField GetField(int fieldId);
         EntityField GetField(int fieldId, bool tracking);
+        EntityField GetFieldByKey(int entityTypeId, string key);
         EntityField AddField(EntityField field);
         EntityField UpdateField(EntityField field);
         void DeleteField(int fieldId);
@@ -64,6 +65,14 @@ namespace GIBS.Module.Entity.Repository
                     .AsNoTracking()
                     .FirstOrDefault(item => item.FieldId == fieldId);
             }
+        }
+
+        public EntityField GetFieldByKey(int entityTypeId, string key)
+        {
+            using var db = _factory.CreateDbContext();
+            return db.EntityFields
+                .AsNoTracking()
+                .FirstOrDefault(item => item.EntityTypeId == entityTypeId && item.Key == key);
         }
 
         public EntityField AddField(EntityField field)

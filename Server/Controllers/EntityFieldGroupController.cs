@@ -54,6 +54,22 @@ namespace GIBS.Module.Entity.Controllers
             }
         }
 
+        [HttpGet("key/{key}")]
+        [Authorize(Policy = PolicyNames.ViewModule)]
+        public async Task<IActionResult> GetByKey(string key, [FromQuery] int entityTypeId, [FromQuery] int moduleId)
+        {
+            try
+            {
+                var item = await _service.GetFieldGroupByKeyAsync(entityTypeId, key, moduleId);
+                return item != null ? Ok(item) : NotFound();
+            }
+            catch (System.Exception ex)
+            {
+                _logger.Log(LogLevel.Error, this, LogFunction.Read, ex, "GetByKey Error {EntityTypeId} {Key}", entityTypeId, key);
+                return StatusCode(StatusCodes.Status500InternalServerError, ex.Message);
+            }
+        }
+
         [HttpPost]
         [Authorize(Policy = PolicyNames.EditModule)]
         public async Task<IActionResult> Post([FromBody] EntityFieldGroup item)

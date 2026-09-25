@@ -43,6 +43,14 @@ namespace GIBS.Module.Entity.Startup
             {
                 services.AddScoped<IEntityValueService, ClientEntityValueService>();
             }
+            if (!services.Any(s => s.ServiceType == typeof(IEntitySchemaPortabilityService)))
+            {
+                services.AddScoped<IEntitySchemaPortabilityService, ClientEntitySchemaPortabilityService>();
+            }
+            if (!services.Any(s => s.ServiceType == typeof(IEntityDataPortabilityService)))
+            {
+                services.AddScoped<IEntityDataPortabilityService, ClientEntityDataPortabilityService>();
+            }
         }
     }
 }

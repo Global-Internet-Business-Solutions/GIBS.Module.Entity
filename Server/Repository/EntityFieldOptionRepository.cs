@@ -11,6 +11,7 @@ namespace GIBS.Module.Entity.Repository
         IEnumerable<EntityFieldOption> GetFieldOptions(int fieldId);
         EntityFieldOption GetFieldOption(int fieldOptionId);
         EntityFieldOption GetFieldOption(int fieldOptionId, bool tracking);
+        EntityFieldOption GetFieldOptionByKey(int fieldId, string key);
         EntityFieldOption AddFieldOption(EntityFieldOption fieldOption);
         EntityFieldOption UpdateFieldOption(EntityFieldOption fieldOption);
         void DeleteFieldOption(int fieldOptionId);
@@ -53,6 +54,14 @@ namespace GIBS.Module.Entity.Repository
                     .AsNoTracking()
                     .FirstOrDefault(item => item.FieldOptionId == fieldOptionId);
             }
+        }
+
+        public EntityFieldOption GetFieldOptionByKey(int fieldId, string key)
+        {
+            using var db = _factory.CreateDbContext();
+            return db.EntityFieldOptions
+                .AsNoTracking()
+                .FirstOrDefault(item => item.FieldId == fieldId && item.Key == key);
         }
 
         public EntityFieldOption AddFieldOption(EntityFieldOption fieldOption)

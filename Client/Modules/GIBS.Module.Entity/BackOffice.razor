@@ -1,3 +1,6 @@
+@using System.IO
+@using System.Text.Json
+@using Microsoft.AspNetCore.Components.Forms
 @using GIBS.Module.Entity.Services
 @using GIBS.Module.Entity.Models
 
@@ -8,6 +11,8 @@
 @inject IEntityFieldGroupService EntityFieldGroupService
 @inject IEntityFieldOptionService EntityFieldOptionService
 @inject IEntityService EntityService
+@inject IEntitySchemaPortabilityService EntitySchemaPortabilityService
+@inject IEntityDataPortabilityService EntityDataPortabilityService
 @inject NavigationManager NavigationManager
 @inject IStringLocalizer<BackOffice> Localizer
 
@@ -26,6 +31,139 @@
                     <ActionLink Action="Add" Security="SecurityAccessLevel.Edit" Text="Add Entity" Class="btn btn-warning" ResourceKey="Add" />
                </div>
            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-secondary">
+                <div class="card-body d-flex flex-column gap-3">
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <button class="btn btn-outline-secondary" @onclick="ExportSchemaAsync" disabled="@_isExporting">
+                            <i class="oi oi-data-transfer-download"></i> Export Schema
+                        </button>
+                        @if (!string.IsNullOrWhiteSpace(_exportDataUrl))
+                        {
+                            <a class="btn btn-secondary" href="@_exportDataUrl" download="@_exportFileName">Download Export</a>
+                        }
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <InputFile OnChange="OnImportFileSelected" accept=".json,application/json" class="form-control" style="max-width: 380px;" />
+                        <button class="btn btn-outline-primary" @onclick="ImportSchemaAsync" disabled="@(_importFile == null || _isImporting)">
+                            <i class="oi oi-data-transfer-upload"></i> Import Schema
+                        </button>
+                        <div class="form-check ms-2">
+                            <input class="form-check-input" type="checkbox" id="overwriteExisting" @bind="_overwriteExistingImport" />
+                            <label class="form-check-label" for="overwriteExisting">Overwrite existing keys</label>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_importFileName))
+                    {
+                        <small class="text-muted">Selected: @_importFileName</small>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(_schemaMessage))
+                    {
+                        <div class="alert @(_schemaMessageIsError ? "alert-danger" : "alert-success") mb-0" role="alert">
+                            @_schemaMessage
+                        </div>
+                    }
+
+                    @if (_importSummary != null)
+                    {
+                        <div class="border rounded p-3 bg-light">
+                            <h6 class="mb-2">Import Summary</h6>
+                            <ul class="mb-0">
+                                <li>EntityTypes: +@_importSummary.EntityTypesCreated created, @_importSummary.EntityTypesUpdated updated</li>
+                                <li>FieldGroups: +@_importSummary.FieldGroupsCreated created, @_importSummary.FieldGroupsUpdated updated</li>
+                                <li>CustomFields: +@_importSummary.FieldsCreated created, @_importSummary.FieldsUpdated updated</li>
+                                <li>Default Templates: +@_importSummary.TemplatesCreated created, @_importSummary.TemplatesUpdated updated</li>
+                                <li>Type Templates: +@_importSummary.TypeTemplatesCreated created, @_importSummary.TypeTemplatesUpdated updated</li>
+                                <li>Field Options: +@_importSummary.FieldOptionsCreated created, @_importSummary.FieldOptionsUpdated updated</li>
+                            </ul>
+                            @if (_importSummary.Warnings.Any())
+                            {
+                                <div class="mt-2">
+                                    <strong>Warnings</strong>
+                                    <ul class="mb-0">
+                                        @foreach (var warning in _importSummary.Warnings)
+                                        {
+                                            <li>@warning</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-secondary">
+                <div class="card-body d-flex flex-column gap-3">
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <button class="btn btn-outline-dark" @onclick="ExportDataAsync" disabled="@_isDataExporting">
+                            <i class="oi oi-cloud-download"></i> Export Records (ZIP)
+                        </button>
+                        @if (!string.IsNullOrWhiteSpace(_dataExportDataUrl))
+                        {
+                            <a class="btn btn-dark" href="@_dataExportDataUrl" download="@_dataExportFileName">Download Records ZIP</a>
+                        }
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <InputFile OnChange="OnDataImportFileSelected" accept=".zip,application/zip" class="form-control" style="max-width: 380px;" />
+                        <button class="btn btn-outline-dark" @onclick="ImportDataAsync" disabled="@(_dataImportFile == null || _isDataImporting)">
+                            <i class="oi oi-cloud-upload"></i> Import Records (ZIP)
+                        </button>
+                        <div class="form-check ms-2">
+                            <input class="form-check-input" type="checkbox" id="overwriteExistingData" @bind="_overwriteExistingDataImport" />
+                            <label class="form-check-label" for="overwriteExistingData">Overwrite existing record keys</label>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_dataImportFileName))
+                    {
+                        <small class="text-muted">Selected ZIP: @_dataImportFileName</small>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(_dataMessage))
+                    {
+                        <div class="alert @(_dataMessageIsError ? "alert-danger" : "alert-success") mb-0" role="alert">
+                            @_dataMessage
+                        </div>
+                    }
+
+                    @if (_dataImportSummary != null)
+                    {
+                        <div class="border rounded p-3 bg-light">
+                            <h6 class="mb-2">Record Import Summary</h6>
+                            <ul class="mb-0">
+                                <li>Records: +@_dataImportSummary.RecordsCreated created, @_dataImportSummary.RecordsUpdated updated</li>
+                                <li>Values: +@_dataImportSummary.ValuesCreated created, @_dataImportSummary.ValuesUpdated replaced</li>
+                                <li>Skipped: @_dataImportSummary.RecordsSkipped</li>
+                            </ul>
+                            @if (_dataImportSummary.Warnings.Any())
+                            {
+                                <div class="mt-2">
+                                    <strong>Warnings</strong>
+                                    <ul class="mb-0">
+                                        @foreach (var warning in _dataImportSummary.Warnings)
+                                        {
+                                            <li>@warning</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
         </div>
     </div>
 
@@ -411,6 +549,27 @@
     private Dictionary<int, List<EntityFieldGroup>> _fieldGroupsByEntityType = new();
     private Dictionary<int, List<EntityField>> _fieldsByEntityType = new();
     private int _selectedEntityTypeId = 0;
+    private IBrowserFile _importFile;
+    private string _importFileName;
+    private bool _overwriteExistingImport = true;
+    private bool _isImporting;
+    private bool _isExporting;
+    private string _schemaMessage;
+    private bool _schemaMessageIsError;
+    private EntitySchemaImportResult _importSummary;
+    private string _exportDataUrl;
+    private string _exportFileName;
+
+    private IBrowserFile _dataImportFile;
+    private string _dataImportFileName;
+    private bool _overwriteExistingDataImport = true;
+    private bool _isDataImporting;
+    private bool _isDataExporting;
+    private string _dataMessage;
+    private bool _dataMessageIsError;
+    private EntityDataImportResult _dataImportSummary;
+    private string _dataExportDataUrl;
+    private string _dataExportFileName;
 
     protected override async Task OnInitializedAsync()
     {
@@ -464,6 +623,155 @@
     private Task OnEntityTypeChanged()
     {
         return Task.CompletedTask;
+    }
+
+    private async Task ExportSchemaAsync()
+    {
+        _schemaMessage = string.Empty;
+        _schemaMessageIsError = false;
+        _isExporting = true;
+
+        try
+        {
+            var package = await EntitySchemaPortabilityService.ExportSchemaAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+            var json = JsonSerializer.Serialize(package, new JsonSerializerOptions { WriteIndented = true });
+            _exportDataUrl = $"data:application/json;charset=utf-8,{Uri.EscapeDataString(json)}";
+            _exportFileName = $"entity-schema-{PageState.Site.SiteId}-{ModuleState.ModuleId}.json";
+            _schemaMessage = "Schema export is ready. Click Download Export.";
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Exporting Entity Schema {Error}", ex.Message);
+            _schemaMessage = "Failed to export schema.";
+            _schemaMessageIsError = true;
+        }
+        finally
+        {
+            _isExporting = false;
+        }
+    }
+
+    private Task OnImportFileSelected(InputFileChangeEventArgs args)
+    {
+        _importFile = args.File;
+        _importFileName = _importFile?.Name;
+        _schemaMessage = string.Empty;
+        _schemaMessageIsError = false;
+        return Task.CompletedTask;
+    }
+
+    private async Task ImportSchemaAsync()
+    {
+        _schemaMessage = string.Empty;
+        _schemaMessageIsError = false;
+        _importSummary = null;
+
+        if (_importFile == null)
+        {
+            _schemaMessage = "Please select a JSON schema file first.";
+            _schemaMessageIsError = true;
+            return;
+        }
+
+        _isImporting = true;
+
+        try
+        {
+            await using var stream = _importFile.OpenReadStream(10 * 1024 * 1024);
+            var package = await JsonSerializer.DeserializeAsync<EntitySchemaPackage>(stream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (package == null)
+            {
+                _schemaMessage = "The selected file is not a valid schema package.";
+                _schemaMessageIsError = true;
+                return;
+            }
+
+            _importSummary = await EntitySchemaPortabilityService.ImportSchemaAsync(PageState.Site.SiteId, ModuleState.ModuleId, package, _overwriteExistingImport);
+            _schemaMessage = "Schema import completed.";
+            await OnInitializedAsync();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Importing Entity Schema {Error}", ex.Message);
+            _schemaMessage = "Failed to import schema.";
+            _schemaMessageIsError = true;
+        }
+        finally
+        {
+            _isImporting = false;
+        }
+    }
+
+    private async Task ExportDataAsync()
+    {
+        _dataMessage = string.Empty;
+        _dataMessageIsError = false;
+        _isDataExporting = true;
+
+        try
+        {
+            var zipBytes = await EntityDataPortabilityService.ExportDataZipAsync(PageState.Site.SiteId, ModuleState.ModuleId);
+            _dataExportDataUrl = $"data:application/zip;base64,{Convert.ToBase64String(zipBytes)}";
+            _dataExportFileName = $"entity-data-{PageState.Site.SiteId}-{ModuleState.ModuleId}.zip";
+            _dataMessage = "Record export is ready. Click Download Records ZIP.";
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Exporting Entity Data {Error}", ex.Message);
+            _dataMessage = "Failed to export records.";
+            _dataMessageIsError = true;
+        }
+        finally
+        {
+            _isDataExporting = false;
+        }
+    }
+
+    private Task OnDataImportFileSelected(InputFileChangeEventArgs args)
+    {
+        _dataImportFile = args.File;
+        _dataImportFileName = _dataImportFile?.Name;
+        _dataMessage = string.Empty;
+        _dataMessageIsError = false;
+        return Task.CompletedTask;
+    }
+
+    private async Task ImportDataAsync()
+    {
+        _dataMessage = string.Empty;
+        _dataMessageIsError = false;
+        _dataImportSummary = null;
+
+        if (_dataImportFile == null)
+        {
+            _dataMessage = "Please select a ZIP records file first.";
+            _dataMessageIsError = true;
+            return;
+        }
+
+        _isDataImporting = true;
+
+        try
+        {
+            await using var stream = _dataImportFile.OpenReadStream(100 * 1024 * 1024);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            var zipBytes = memory.ToArray();
+
+            _dataImportSummary = await EntityDataPortabilityService.ImportDataZipAsync(PageState.Site.SiteId, ModuleState.ModuleId, zipBytes, _overwriteExistingDataImport);
+            _dataMessage = "Record import completed.";
+            await OnInitializedAsync();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Importing Entity Data {Error}", ex.Message);
+            _dataMessage = "Failed to import records.";
+            _dataMessageIsError = true;
+        }
+        finally
+        {
+            _isDataImporting = false;
+        }
     }
 
     private List<EntityType> BuildEntityTypeTree(List<EntityType> flatList)

@@ -74,6 +74,19 @@ namespace GIBS.Module.Entity.Services
             }
         }
 
+        public Task<EntityField> GetFieldByKeyAsync(int entityTypeId, string key, int moduleId)
+        {
+            if (_userPermissions.IsAuthorized(_accessor.HttpContext.User, _alias.SiteId, EntityNames.Module, moduleId, PermissionNames.View))
+            {
+                return Task.FromResult(_repository.GetFieldByKey(entityTypeId, key));
+            }
+            else
+            {
+                _logger.Log(LogLevel.Error, this, LogFunction.Security, "Unauthorized EntityField GetByKey Attempt {EntityTypeId} {Key} {ModuleId}", entityTypeId, key, moduleId);
+                return null;
+            }
+        }
+
         public Task<EntityField> AddFieldAsync(EntityField field)
         {
             if (_accessor.HttpContext.User.Identity.IsAuthenticated)

@@ -11,7 +11,7 @@ namespace GIBS.Module.Entity.Repository
         IEnumerable<EntityType> GetEntityTypes(int siteId, int moduleId);
         EntityType GetEntityType(int entityTypeId);
         EntityType GetEntityType(int entityTypeId, bool tracking);
-        EntityType GetEntityTypeByKey(int siteId, string key);
+        EntityType GetEntityTypeByKey(int siteId, int moduleId, string key);
         EntityType AddEntityType(EntityType entityType);
         EntityType UpdateEntityType(EntityType entityType);
         void DeleteEntityType(int entityTypeId);
@@ -56,12 +56,12 @@ namespace GIBS.Module.Entity.Repository
             }
         }
 
-        public EntityType GetEntityTypeByKey(int siteId, string key)
+        public EntityType GetEntityTypeByKey(int siteId, int moduleId, string key)
         {
             using var db = _factory.CreateDbContext();
             return db.EntityTypes
                 .AsNoTracking()
-                .FirstOrDefault(item => item.SiteId == siteId && item.Key == key);
+                .FirstOrDefault(item => item.SiteId == siteId && item.ModuleId == moduleId && item.Key == key);
         }
 
         public EntityType AddEntityType(EntityType entityType)

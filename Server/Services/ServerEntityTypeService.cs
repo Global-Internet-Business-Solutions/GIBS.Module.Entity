@@ -65,7 +65,7 @@ namespace GIBS.Module.Entity.Services
         {
             if (_userPermissions.IsAuthorized(_accessor.HttpContext.User, _alias.SiteId, EntityNames.Module, moduleId, PermissionNames.View))
             {
-                return Task.FromResult(_entityTypeRepository.GetEntityTypeByKey(siteId, key));
+                return Task.FromResult(_entityTypeRepository.GetEntityTypeByKey(siteId, moduleId, key));
             }
             else
             {

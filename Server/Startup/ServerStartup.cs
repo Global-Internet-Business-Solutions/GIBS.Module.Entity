@@ -34,6 +34,8 @@ namespace GIBS.Module.Entity.Startup
 
             // Phase 2: Entity Value services
             services.AddTransient<IEntityValueService, EntityValueService>();
+            services.AddTransient<IEntitySchemaPortabilityService, ServerEntitySchemaPortabilityService>();
+            services.AddTransient<IEntityDataPortabilityService, ServerEntityDataPortabilityService>();
 
             // DbContext factory
             services.AddDbContextFactory<EntityContext>(opt => { }, ServiceLifetime.Transient);

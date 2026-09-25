@@ -26,6 +26,11 @@ namespace GIBS.Module.Entity.Services
             return await GetJsonAsync<EntityFieldGroup>($"{ApiUrl}/{fieldGroupId}?moduleid={moduleId}");
         }
 
+        public async Task<EntityFieldGroup> GetFieldGroupByKeyAsync(int entityTypeId, string key, int moduleId)
+        {
+            return await GetJsonAsync<EntityFieldGroup>($"{ApiUrl}/key/{key}?entitytypeid={entityTypeId}&moduleid={moduleId}");
+        }
+
         public async Task<EntityFieldGroup> AddFieldGroupAsync(EntityFieldGroup fieldGroup)
         {
             return await PostJsonAsync<EntityFieldGroup>(ApiUrl, fieldGroup);

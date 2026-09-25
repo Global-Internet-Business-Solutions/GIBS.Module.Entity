@@ -385,6 +385,7 @@
                 .Where(e => e.IsFeatured && e.IsEnabled && e.IsPublished)
                 .OrderBy(e => e.SortOrder)
                 .ToList();
+            EnsureEntityTypeReferences(_featuredRecords);
 
             if (_featuredRecords.Any())
             {
@@ -435,6 +436,7 @@
             var entities = await EntityService.GetEntitysAsync(ModuleState.ModuleId);
             _recordDetails = (entities ?? new List<Entity>())
                 .FirstOrDefault(e => e.IsEnabled && e.IsPublished && string.Equals(e.Key, detailKey, StringComparison.OrdinalIgnoreCase));
+            EnsureEntityTypeReference(_recordDetails);
 
             if (_recordDetails == null)
             {
@@ -501,6 +503,7 @@
                 .Where(e => selectedTypeIds.Contains(e.EntityTypeId) && e.IsEnabled && e.IsPublished)
                 .OrderBy(e => e.SortOrder)
                 .ToList();
+            EnsureEntityTypeReferences(_listingRecords);
 
             if (_listingRecords.Any())
             {
@@ -567,6 +570,32 @@
         }
 
         return (fieldsByKey.Values.ToList(), fieldGroupsByKey.Values.ToList(), entityValuesMap);
+    }
+
+    private void EnsureEntityTypeReferences(IEnumerable<Entity> records)
+    {
+        if (records == null)
+        {
+            return;
+        }
+
+        foreach (var record in records)
+        {
+            EnsureEntityTypeReference(record);
+        }
+    }
+
+    private void EnsureEntityTypeReference(Entity record)
+    {
+        if (record == null)
+        {
+            return;
+        }
+
+        if (_entityTypeLookup.TryGetValue(record.EntityTypeId, out var entityType))
+        {
+            record.EntityType = entityType;
+        }
     }
 
     private string RenderTemplateSection(string templateContent)

@@ -61,6 +61,19 @@ namespace GIBS.Module.Entity.Services
             }
         }
 
+        public Task<EntityFieldGroup> GetFieldGroupByKeyAsync(int entityTypeId, string key, int moduleId)
+        {
+            if (_userPermissions.IsAuthorized(_accessor.HttpContext.User, _alias.SiteId, EntityNames.Module, moduleId, PermissionNames.View))
+            {
+                return Task.FromResult(_repository.GetFieldGroupByKey(entityTypeId, key));
+            }
+            else
+            {
+                _logger.Log(LogLevel.Error, this, LogFunction.Security, "Unauthorized EntityFieldGroup GetByKey Attempt {EntityTypeId} {Key} {ModuleId}", entityTypeId, key, moduleId);
+                return null;
+            }
+        }
+
         public Task<EntityFieldGroup> AddFieldGroupAsync(EntityFieldGroup fieldGroup)
         {
             // Note: moduleId validation would require looking up the EntityType - simplified here
