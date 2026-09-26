@@ -39,5 +39,19 @@ namespace GIBS.Module.Entity.Services
         {
             await DeleteAsync(CreateAuthorizationPolicyUrl($"{Apiurl}/{EntityId}/{ModuleId}", EntityNames.Module, ModuleId));
         }
+
+        public async Task<int> EnsureEntityUploadFolderAsync(int moduleId, int baseFolderId, string entityTypeKey, string entityKeyOrName)
+        {
+            var encodedTypeKey = System.Uri.EscapeDataString(entityTypeKey ?? string.Empty);
+            var encodedEntityKey = System.Uri.EscapeDataString(entityKeyOrName ?? string.Empty);
+            var url = CreateAuthorizationPolicyUrl($"{Apiurl}/ensurefolder?moduleid={moduleId}&basefolderid={baseFolderId}&entitytypekey={encodedTypeKey}&entitykeyorname={encodedEntityKey}", EntityNames.Module, moduleId);
+            return await GetJsonAsync<int>(url, baseFolderId);
+        }
+
+        public async Task<int> MoveFileToFolderAsync(int moduleId, int fileId, int targetFolderId)
+        {
+            var url = CreateAuthorizationPolicyUrl($"{Apiurl}/movefile?moduleid={moduleId}&fileid={fileId}&targetfolderid={targetFolderId}", EntityNames.Module, moduleId);
+            return await GetJsonAsync<int>(url, fileId);
+        }
     }
 }

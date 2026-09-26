@@ -7,6 +7,15 @@ namespace GIBS.Module.Entity.Models
     {
         public DateTime ExportedOnUtc { get; set; } = DateTime.UtcNow;
         public List<EntityDataRecordItem> Records { get; set; } = new();
+        public List<EntityDataFileItem> Files { get; set; } = new();
+    }
+
+    public class EntityDataFileItem
+    {
+        public int SourceFileId { get; set; }
+        public string EntryPath { get; set; }
+        public string FileName { get; set; }
+        public string FolderPath { get; set; }
     }
 
     public class EntityDataRecordItem

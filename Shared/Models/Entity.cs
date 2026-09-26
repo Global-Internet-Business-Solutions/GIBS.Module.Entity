@@ -1,3 +1,5 @@
+#nullable enable
+
 using Oqtane.Models;
 using System;
 using System.Collections.Generic;

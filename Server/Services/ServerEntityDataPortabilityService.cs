@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using GIBS.Module.Entity.Models;
 using GIBS.Module.Entity.Repository;
@@ -13,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Oqtane.Enums;
 using Oqtane.Infrastructure;
 using Oqtane.Models;
+using Oqtane.Repository;
 using Oqtane.Security;
 using Oqtane.Shared;
 
@@ -24,19 +26,28 @@ namespace GIBS.Module.Entity.Services
         private readonly IUserPermissions _userPermissions;
         private readonly ILogManager _logger;
         private readonly IHttpContextAccessor _accessor;
+        private readonly IFileRepository _fileRepository;
+        private readonly IFolderRepository _folderRepository;
         private readonly Alias _alias;
+        private Dictionary<int, Oqtane.Models.File> _importedFilesBySourceId = new();
+        private HashSet<int> _zipFileSourceIds = new();
+        private HashSet<int> _missingZipFileEntryIds = new();
 
         public ServerEntityDataPortabilityService(
             IDbContextFactory<EntityContext> factory,
             IUserPermissions userPermissions,
             ITenantManager tenantManager,
             ILogManager logger,
-            IHttpContextAccessor accessor)
+            IHttpContextAccessor accessor,
+            IFileRepository fileRepository,
+            IFolderRepository folderRepository)
         {
             _factory = factory;
             _userPermissions = userPermissions;
             _logger = logger;
             _accessor = accessor;
+            _fileRepository = fileRepository;
+            _folderRepository = folderRepository;
             _alias = tenantManager.GetAlias();
         }
 
@@ -430,12 +441,14 @@ namespace GIBS.Module.Entity.Services
                         }
                     }
 
+                    var rewrittenTextValue = RewriteTextValueFileReferences(valueItem.TextValue);
+
                     db.EntityValues.Add(new EntityValue
                     {
                         EntityId = entity.EntityId,
                         FieldId = field.FieldId,
                         ValueIndex = valueItem.ValueIndex,
-                        TextValue = valueItem.TextValue,
+                        TextValue = rewrittenTextValue,
                         IntegerValue = valueItem.IntegerValue,
                         LongValue = valueItem.LongValue,
                         DecimalValue = valueItem.DecimalValue,
@@ -455,18 +468,70 @@ namespace GIBS.Module.Entity.Services
                 await db.SaveChangesAsync();
             }
 
+            if (_missingZipFileEntryIds.Count > 0)
+            {
+                foreach (var missingFileId in _missingZipFileEntryIds.OrderBy(x => x))
+                {
+                    result.Warnings.Add($"Referenced fileId '{missingFileId}' was not found in ZIP file entries and could not be imported.");
+                }
+            }
+
             return result;
         }
 
         public async Task<byte[]> ExportDataZipAsync(int siteId, int moduleId)
         {
             var package = await ExportDataAsync(siteId, moduleId);
-            var json = JsonSerializer.Serialize(package, new JsonSerializerOptions { WriteIndented = true });
-            var bytes = Encoding.UTF8.GetBytes(json);
+            package ??= new EntityDataPackage();
+
+            var sourceFileIds = new HashSet<int>();
+            foreach (var record in package.Records)
+            {
+                foreach (var value in record.Values)
+                {
+                    foreach (var fileId in ExtractFileIdsFromTextValue(value.TextValue))
+                    {
+                        sourceFileIds.Add(fileId);
+                    }
+                }
+            }
 
             using var output = new MemoryStream();
             using (var archive = new ZipArchive(output, ZipArchiveMode.Create, true))
             {
+                foreach (var sourceFileId in sourceFileIds)
+                {
+                    var file = _fileRepository.GetFile(sourceFileId);
+                    if (file == null)
+                    {
+                        continue;
+                    }
+
+                    var filePath = _fileRepository.GetFilePath(file);
+                    if (string.IsNullOrWhiteSpace(filePath) || !System.IO.File.Exists(filePath))
+                    {
+                        continue;
+                    }
+
+                    var entryPath = $"files/{sourceFileId}/{file.Name}";
+                    var fileEntry = archive.CreateEntry(entryPath, CompressionLevel.Fastest);
+                    await using (var fileEntryStream = fileEntry.Open())
+                    await using (var sourceStream = System.IO.File.OpenRead(filePath))
+                    {
+                        await sourceStream.CopyToAsync(fileEntryStream);
+                    }
+
+                    package.Files.Add(new EntityDataFileItem
+                    {
+                        SourceFileId = sourceFileId,
+                        EntryPath = entryPath,
+                        FileName = file.Name,
+                        FolderPath = file.Folder?.Path
+                    });
+                }
+
+                var json = JsonSerializer.Serialize(package, new JsonSerializerOptions { WriteIndented = true });
+                var bytes = Encoding.UTF8.GetBytes(json);
                 var entry = archive.CreateEntry("records.json", CompressionLevel.Fastest);
                 await using var entryStream = entry.Open();
                 await entryStream.WriteAsync(bytes, 0, bytes.Length);
@@ -497,7 +562,287 @@ namespace GIBS.Module.Entity.Services
                 return new EntityDataImportResult { Warnings = new List<string> { "Invalid records.json payload." } };
             }
 
-            return await ImportDataAsync(siteId, moduleId, package, overwriteExisting);
+            _zipFileSourceIds = package.Files?
+                .Where(f => f != null && f.SourceFileId > 0)
+                .Select(f => f.SourceFileId)
+                .ToHashSet() ?? new HashSet<int>();
+            _missingZipFileEntryIds = new HashSet<int>();
+
+            _importedFilesBySourceId = await ImportFilesFromArchiveAsync(siteId, archive, package.Files);
+            try
+            {
+                return await ImportDataAsync(siteId, moduleId, package, overwriteExisting);
+            }
+            finally
+            {
+                _importedFilesBySourceId = new Dictionary<int, Oqtane.Models.File>();
+                _zipFileSourceIds = new HashSet<int>();
+                _missingZipFileEntryIds = new HashSet<int>();
+            }
+        }
+
+        private async Task<Dictionary<int, Oqtane.Models.File>> ImportFilesFromArchiveAsync(int siteId, ZipArchive archive, List<EntityDataFileItem> files)
+        {
+            var map = new Dictionary<int, Oqtane.Models.File>();
+            if (files == null || files.Count == 0)
+            {
+                return map;
+            }
+
+            foreach (var fileItem in files)
+            {
+                if (fileItem == null || fileItem.SourceFileId <= 0 || string.IsNullOrWhiteSpace(fileItem.EntryPath))
+                {
+                    continue;
+                }
+
+                var archiveEntry = archive.GetEntry(fileItem.EntryPath);
+                if (archiveEntry == null)
+                {
+                    _missingZipFileEntryIds.Add(fileItem.SourceFileId);
+                    continue;
+                }
+
+                var folder = EnsureFolderPath(siteId, fileItem.FolderPath);
+                if (folder == null)
+                {
+                    continue;
+                }
+
+                var fileName = string.IsNullOrWhiteSpace(fileItem.FileName) ? Path.GetFileName(fileItem.EntryPath) : fileItem.FileName;
+                fileName = EnsureUniqueFileName(folder.FolderId, fileName);
+
+                var newFile = new Oqtane.Models.File
+                {
+                    FolderId = folder.FolderId,
+                    Name = fileName,
+                    Extension = Path.GetExtension(fileName)?.TrimStart('.').ToLowerInvariant() ?? string.Empty,
+                    Description = string.Empty,
+                    Size = (int)archiveEntry.Length,
+                    ImageHeight = 0,
+                    ImageWidth = 0,
+                    CreatedBy = _accessor.HttpContext?.User?.Identity?.Name ?? "system",
+                    CreatedOn = DateTime.UtcNow,
+                    ModifiedBy = _accessor.HttpContext?.User?.Identity?.Name ?? "system",
+                    ModifiedOn = DateTime.UtcNow
+                };
+
+                var filePath = _fileRepository.GetFilePath(newFile);
+                if (string.IsNullOrWhiteSpace(filePath))
+                {
+                    continue;
+                }
+
+                var targetDirectory = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrWhiteSpace(targetDirectory) && !Directory.Exists(targetDirectory))
+                {
+                    Directory.CreateDirectory(targetDirectory);
+                }
+
+                await using (var source = archiveEntry.Open())
+                await using (var destination = System.IO.File.Create(filePath))
+                {
+                    await source.CopyToAsync(destination);
+                }
+
+                var inserted = _fileRepository.AddFile(newFile);
+                if (inserted != null)
+                {
+                    map[fileItem.SourceFileId] = inserted;
+                }
+            }
+
+            return map;
+        }
+
+        private Folder EnsureFolderPath(int siteId, string folderPath)
+        {
+            var normalizedPath = (folderPath ?? string.Empty).Replace("\\", "/").Trim('/');
+            if (string.IsNullOrWhiteSpace(normalizedPath))
+            {
+                return null;
+            }
+
+            Folder currentParent = null;
+            var currentPath = string.Empty;
+            foreach (var segment in normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries))
+            {
+                currentPath = string.IsNullOrEmpty(currentPath) ? segment : $"{currentPath}/{segment}";
+                var candidatePath = currentPath.EndsWith("/") ? currentPath : currentPath + "/";
+
+                var folder = _folderRepository.GetFolder(siteId, candidatePath);
+                if (folder == null)
+                {
+                    var newFolder = new Folder
+                    {
+                        SiteId = siteId,
+                        ParentId = currentParent?.FolderId,
+                        Name = segment,
+                        Type = currentParent?.Type ?? FolderTypes.Public,
+                        Path = candidatePath,
+                        Order = 0,
+                        ImageSizes = currentParent?.ImageSizes,
+                        Capacity = currentParent?.Capacity ?? 0,
+                        CacheControl = currentParent?.CacheControl,
+                        IsSystem = false,
+                        PermissionList = currentParent?.PermissionList ?? new List<Permission>
+                        {
+                            new Permission(PermissionNames.View, RoleNames.Everyone, true),
+                            new Permission(PermissionNames.Edit, RoleNames.Admin, true)
+                        }
+                    };
+
+                    try
+                    {
+                        folder = _folderRepository.AddFolder(newFolder);
+                    }
+                    catch (DbUpdateException)
+                    {
+                        folder = _folderRepository.GetFolder(siteId, candidatePath);
+                    }
+                }
+
+                if (folder == null)
+                {
+                    return currentParent;
+                }
+
+                currentParent = folder;
+            }
+
+            return currentParent;
+        }
+
+        private string EnsureUniqueFileName(int folderId, string fileName)
+        {
+            var safeName = string.IsNullOrWhiteSpace(fileName) ? $"file-{Guid.NewGuid():N}.bin" : fileName;
+            var extension = Path.GetExtension(safeName);
+            var baseName = Path.GetFileNameWithoutExtension(safeName);
+            var candidate = safeName;
+            var counter = 1;
+
+            while (_fileRepository.GetFile(folderId, candidate) != null)
+            {
+                candidate = $"{baseName}-{counter}{extension}";
+                counter++;
+            }
+
+            return candidate;
+        }
+
+        private IEnumerable<int> ExtractFileIdsFromTextValue(string textValue)
+        {
+            if (string.IsNullOrWhiteSpace(textValue))
+            {
+                yield break;
+            }
+
+            JsonNode node;
+            try
+            {
+                node = JsonNode.Parse(textValue);
+            }
+            catch
+            {
+                yield break;
+            }
+
+            foreach (var id in ExtractFileIdsFromNode(node))
+            {
+                yield return id;
+            }
+        }
+
+        private IEnumerable<int> ExtractFileIdsFromNode(JsonNode node)
+        {
+            if (node is JsonObject obj)
+            {
+                if (obj.TryGetPropertyValue("fileId", out var fileIdNode) && int.TryParse(fileIdNode?.ToString(), out var fileId) && fileId > 0)
+                {
+                    yield return fileId;
+                }
+
+                foreach (var kv in obj)
+                {
+                    foreach (var childId in ExtractFileIdsFromNode(kv.Value))
+                    {
+                        yield return childId;
+                    }
+                }
+            }
+            else if (node is JsonArray arr)
+            {
+                foreach (var item in arr)
+                {
+                    foreach (var childId in ExtractFileIdsFromNode(item))
+                    {
+                        yield return childId;
+                    }
+                }
+            }
+        }
+
+        private string RewriteTextValueFileReferences(string textValue)
+        {
+            if (string.IsNullOrWhiteSpace(textValue))
+            {
+                return textValue;
+            }
+
+            JsonNode node;
+            try
+            {
+                node = JsonNode.Parse(textValue);
+            }
+            catch
+            {
+                return textValue;
+            }
+
+            var changed = RewriteFileReferencesInNode(node);
+            return changed ? node.ToJsonString() : textValue;
+        }
+
+        private bool RewriteFileReferencesInNode(JsonNode node)
+        {
+            var changed = false;
+
+            if (node is JsonObject obj)
+            {
+                if (obj.TryGetPropertyValue("fileId", out var fileIdNode) && int.TryParse(fileIdNode?.ToString(), out var sourceFileId) && sourceFileId > 0)
+                {
+                    if (_importedFilesBySourceId.TryGetValue(sourceFileId, out var importedFile))
+                    {
+                        obj["fileId"] = importedFile.FileId;
+                        obj["filePath"] = importedFile.Url;
+                        changed = true;
+                    }
+                    else if (!_zipFileSourceIds.Contains(sourceFileId) || _missingZipFileEntryIds.Contains(sourceFileId))
+                    {
+                        _missingZipFileEntryIds.Add(sourceFileId);
+                    }
+                }
+
+                foreach (var kv in obj.ToList())
+                {
+                    if (RewriteFileReferencesInNode(kv.Value))
+                    {
+                        changed = true;
+                    }
+                }
+            }
+            else if (node is JsonArray arr)
+            {
+                foreach (var item in arr)
+                {
+                    if (RewriteFileReferencesInNode(item))
+                    {
+                        changed = true;
+                    }
+                }
+            }
+
+            return changed;
         }
     }
 }

@@ -14,5 +14,9 @@ namespace GIBS.Module.Entity.Services
         Task<Models.Entity> UpdateEntityAsync(Models.Entity Entity);
 
         Task DeleteEntityAsync(int EntityId, int ModuleId);
+
+        Task<int> EnsureEntityUploadFolderAsync(int moduleId, int baseFolderId, string entityTypeKey, string entityKeyOrName);
+
+        Task<int> MoveFileToFolderAsync(int moduleId, int fileId, int targetFolderId);
     }
 }

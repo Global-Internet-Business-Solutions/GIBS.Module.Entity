@@ -17,6 +17,7 @@
 @inject IStringLocalizer<EntityEdit> Localizer
 @inject ISettingService SettingService
 @inject IFileService FileService
+@inject IFolderService FolderService
 @inject IHtmlTextService HtmlTextService
 
 <form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
@@ -252,7 +253,7 @@
                                                 <div class="mt-2">
                                                     <small class="text-muted">@imagePaths[0]</small>
                                                     <br />
-                                                    <button type="button" class="btn btn-sm btn-danger mt-2" @onclick="() => ClearImage(customField.FieldId)">
+                                                    <button type="button" class="btn btn-sm btn-danger mt-2" @onclick="async () => await ClearImage(customField.FieldId)">
                                                         Remove Image
                                                     </button>
                                                 </div>
@@ -430,6 +431,7 @@
     private int _imageMaxHeight = 900;
     private bool _showPhotoTitle = true;
     private int _currentImageFieldId = 0;
+    private readonly Dictionary<string, int> _entityUploadFolderCache = new(StringComparer.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync()
     {
@@ -945,6 +947,11 @@
                     var imageData = JsonSerializer.Deserialize<Dictionary<string, object>>(value);
                     if (imageData != null && imageData.TryGetValue("filePath", out var path) && path?.ToString() == imagePath)
                     {
+                        if (imageData.TryGetValue("fileId", out var singleFileIdObj) && int.TryParse(singleFileIdObj?.ToString(), out var singleFileId) && singleFileId > 0)
+                        {
+                            await DeleteFileFromServerAsync(singleFileId);
+                        }
+
                         _customFieldValues[fieldId] = string.Empty;
                         StateHasChanged();
                         await logger.LogInformation($"Removed single image from field {fieldId}");
@@ -961,6 +968,11 @@
 
                 if (toRemove != null)
                 {
+                    if (toRemove.TryGetValue("fileId", out var fileIdObj) && int.TryParse(fileIdObj?.ToString(), out var fileId) && fileId > 0)
+                    {
+                        await DeleteFileFromServerAsync(fileId);
+                    }
+
                     imageArray.Remove(toRemove);
 
                     if (imageArray.Count > 0)
@@ -1862,9 +1874,16 @@
 
             await logger.LogInformation($"Field info: IsMultiValue={isMultiValue}");
 
+            var fileToPersist = await MoveUploadToEntityFolderAsync(uploadedFile);
+            if (fileToPersist == null)
+            {
+                AddModuleMessage("Unable to organize uploaded file into entity folder.", MessageType.Error);
+                return;
+            }
+
             // Extract FileId and FilePath
-            int resizedFileId = uploadedFile.FileId;
-            string filePath = uploadedFile.Url;
+            int resizedFileId = fileToPersist.FileId;
+            string filePath = fileToPersist.Url;
 
             await logger.LogInformation($"Extracted values - FileId: {resizedFileId}, FilePath: {filePath}");
 
@@ -1960,11 +1979,220 @@
         }
     }
 
-    /// <summary>
-    /// Clear/remove the selected image
-    /// </summary>
-    private void ClearImage(int fieldId)
+    private async Task<Oqtane.Models.File> MoveUploadToEntityFolderAsync(Oqtane.Models.File uploadedFile)
     {
-        _customFieldValues[fieldId] = string.Empty;
+        if (uploadedFile == null)
+        {
+            return null;
+        }
+
+        var targetFolderId = await ResolveEntityUploadFolderIdAsync();
+        if (targetFolderId <= 0 || uploadedFile.FolderId == targetFolderId)
+        {
+            return uploadedFile;
+        }
+
+        var movedFileId = await ClientEntityService.MoveFileToFolderAsync(ModuleState.ModuleId, uploadedFile.FileId, targetFolderId);
+        if (movedFileId <= 0)
+        {
+            await logger.LogWarning("MoveFileToFolderAsync returned invalid file id for uploaded file {FileId}", uploadedFile.FileId);
+            return uploadedFile;
+        }
+
+        var movedFile = await FileService.GetFileAsync(movedFileId);
+        if (movedFile == null || movedFile.FolderId != targetFolderId)
+        {
+            await logger.LogWarning("File move did not land in target folder. FileId={FileId}, TargetFolderId={TargetFolderId}, ActualFolderId={ActualFolderId}", movedFileId, targetFolderId, movedFile?.FolderId);
+            return movedFile ?? uploadedFile;
+        }
+
+        return movedFile;
+    }
+
+    private async Task<int> ResolveEntityUploadFolderIdAsync()
+    {
+        var typeKey = _entityTypeLookup.TryGetValue(_entityTypeId, out var entityType)
+            ? entityType.Key
+            : (_entityTypeId > 0 ? _entityTypeId.ToString() : "type");
+
+        // Prefer stable key, then name, then deterministic draft/entity fallback
+        var entityKeyOrName = !string.IsNullOrWhiteSpace(_key)
+            ? _key
+            : !string.IsNullOrWhiteSpace(_name)
+                ? _name
+                : (_id > 0 ? $"entity-{_id}" : $"draft-{PageState.User?.UserId ?? 0}");
+
+        var typeSegment = SanitizeFolderSegment(typeKey);
+        var entitySegment = SanitizeFolderSegment(entityKeyOrName);
+        var cacheKey = $"{typeSegment}/{entitySegment}";
+
+        if (_entityUploadFolderCache.TryGetValue(cacheKey, out var cachedFolderId))
+        {
+            return cachedFolderId;
+        }
+
+        var resolvedFolderId = await ClientEntityService.EnsureEntityUploadFolderAsync(ModuleState.ModuleId, _fileFolderId, typeSegment, entitySegment);
+        if (resolvedFolderId <= 0)
+        {
+            resolvedFolderId = _fileFolderId;
+        }
+
+        _entityUploadFolderCache[cacheKey] = resolvedFolderId;
+        return resolvedFolderId;
+    }
+
+    private async Task<Oqtane.Models.Folder> EnsureChildFolderAsync(Oqtane.Models.Folder parentFolder, string childFolderName)
+    {
+        if (parentFolder == null)
+        {
+            return null;
+        }
+
+        var normalizedPath = Oqtane.Shared.Utilities.UrlCombine(parentFolder.Path, childFolderName);
+        if (!normalizedPath.EndsWith('/'))
+        {
+            normalizedPath += "/";
+        }
+
+        // Lookup existing folder by normalized path (with and without leading slash)
+        var existingFolder = await FolderService.GetFolderAsync(PageState.Site.SiteId, normalizedPath)
+            ?? await FolderService.GetFolderAsync(PageState.Site.SiteId, "/" + normalizedPath.TrimStart('/'))
+            ?? await FindChildFolderByNameAsync(parentFolder.FolderId, childFolderName);
+
+        if (existingFolder != null)
+        {
+            return existingFolder;
+        }
+
+        // Let the server compute Path from ParentId + Name
+        var newFolder = new Oqtane.Models.Folder
+        {
+            SiteId = PageState.Site.SiteId,
+            ParentId = parentFolder.FolderId,
+            Type = parentFolder.Type,
+            Name = childFolderName,
+            Path = string.Empty,
+            Order = 0,
+            ImageSizes = parentFolder.ImageSizes,
+            Capacity = parentFolder.Capacity,
+            IsSystem = false,
+            CacheControl = parentFolder.CacheControl
+        };
+
+        try
+        {
+            var createdFolder = await FolderService.AddFolderAsync(newFolder);
+            if (createdFolder != null)
+            {
+                return createdFolder;
+            }
+        }
+        catch (Exception ex)
+        {
+            // Common race: another request creates the same folder between lookup and create.
+            await logger.LogWarning(ex, "Folder create conflict/failure for path {FolderPath}. Attempting fallback lookup.", normalizedPath);
+        }
+
+        // Final fallback: try reading again in case another request created it
+        return await FolderService.GetFolderAsync(PageState.Site.SiteId, normalizedPath)
+            ?? await FolderService.GetFolderAsync(PageState.Site.SiteId, "/" + normalizedPath.TrimStart('/'))
+            ?? await FindChildFolderByNameAsync(parentFolder.FolderId, childFolderName);
+    }
+
+    private async Task<Oqtane.Models.Folder> FindChildFolderByNameAsync(int parentFolderId, string childFolderName)
+    {
+        var folders = await FolderService.GetFoldersAsync(PageState.Site.SiteId);
+        return folders?.FirstOrDefault(f => f.ParentId == parentFolderId && string.Equals(f.Name, childFolderName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string SanitizeFolderSegment(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "unassigned";
+        }
+
+        var invalidChars = System.IO.Path.GetInvalidFileNameChars();
+        var cleaned = new string(value.Trim().Select(c => invalidChars.Contains(c) ? '-' : c).ToArray());
+        cleaned = cleaned.Replace('/', '-').Replace('\\', '-');
+
+        return string.IsNullOrWhiteSpace(cleaned) ? "unassigned" : cleaned;
+    }
+
+    private async Task DeleteFilesFromFieldValueAsync(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        try
+        {
+            var fileIds = new HashSet<int>();
+
+            if (value.StartsWith("[") && value.EndsWith("]"))
+            {
+                var imageArray = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(value);
+                if (imageArray != null)
+                {
+                    foreach (var imageObj in imageArray)
+                    {
+                        if (imageObj != null && imageObj.TryGetValue("fileId", out var fileIdObj) && int.TryParse(fileIdObj?.ToString(), out var fileId) && fileId > 0)
+                        {
+                            fileIds.Add(fileId);
+                        }
+                    }
+                }
+            }
+            else if (value.StartsWith("{") && value.EndsWith("}"))
+            {
+                var imageData = JsonSerializer.Deserialize<Dictionary<string, object>>(value);
+                if (imageData != null && imageData.TryGetValue("fileId", out var fileIdObj) && int.TryParse(fileIdObj?.ToString(), out var fileId) && fileId > 0)
+                {
+                    fileIds.Add(fileId);
+                }
+            }
+
+            foreach (var fileId in fileIds)
+            {
+                await DeleteFileFromServerAsync(fileId);
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogWarning(ex, "Unable to parse file metadata for server delete. {Error}", ex.Message);
+        }
+    }
+
+    private async Task DeleteFileFromServerAsync(int fileId)
+    {
+        try
+        {
+            await FileService.DeleteFileAsync(fileId);
+            await logger.LogInformation("Deleted uploaded file from server {FileId}", fileId);
+        }
+        catch (Exception ex)
+        {
+            await logger.LogWarning(ex, "Could not delete file {FileId} from server. {Error}", fileId, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Clear/remove the selected image and delete physical file(s) when possible.
+    /// </summary>
+    private async Task ClearImage(int fieldId)
+    {
+        try
+        {
+            var value = GetCustomFieldValue(fieldId, string.Empty);
+            await DeleteFilesFromFieldValueAsync(value);
+            _customFieldValues[fieldId] = string.Empty;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error clearing image for field {FieldId}: {Error}", fieldId, ex.Message);
+            AddModuleMessage("Unable to remove image from server.", MessageType.Warning);
+        }
     }
 }

@@ -1,3 +1,5 @@
+#nullable enable
+
 using GIBS.Module.Entity.Models;
 using System;
 using System.Collections.Generic;

@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -47,9 +49,9 @@ namespace GIBS.Module.Entity.Helpers
             string template,
             Models.Entity entity,
             IEnumerable<EntityField> fields,
-            string viewLinkBaseUrl = null,
-            string editLinkBaseUrl = null,
-            IEnumerable<EntityFieldGroup> fieldGroups = null)
+            string? viewLinkBaseUrl = null,
+            string? editLinkBaseUrl = null,
+            IEnumerable<EntityFieldGroup>? fieldGroups = null)
         {
             if (string.IsNullOrWhiteSpace(template) || entity == null)
             {
@@ -127,9 +129,9 @@ namespace GIBS.Module.Entity.Helpers
             Models.Entity entity,
             IEnumerable<EntityField> fields,
             IEnumerable<EntityValue> entityValues,
-            string viewLinkBaseUrl = null,
-            string editLinkBaseUrl = null,
-            IEnumerable<EntityFieldGroup> fieldGroups = null)
+            string? viewLinkBaseUrl = null,
+            string? editLinkBaseUrl = null,
+            IEnumerable<EntityFieldGroup>? fieldGroups = null)
         {
             if (string.IsNullOrWhiteSpace(template) || entity == null)
             {
@@ -223,7 +225,7 @@ namespace GIBS.Module.Entity.Helpers
             return $"<ul>{string.Join(string.Empty, listItems)}</ul>";
         }
 
-        private static void ApplyFieldGroupToken(StringBuilder result, IEnumerable<EntityField> fields, IEnumerable<EntityFieldGroup> fieldGroups, Func<int, IReadOnlyList<string>> getFieldValues)
+        private static void ApplyFieldGroupToken(StringBuilder result, IEnumerable<EntityField> fields, IEnumerable<EntityFieldGroup>? fieldGroups, Func<int, IReadOnlyList<string>> getFieldValues)
         {
             if (result.Length == 0)
             {
@@ -284,7 +286,7 @@ namespace GIBS.Module.Entity.Helpers
             result.Append(content);
         }
 
-        private static void ApplyViewLinkToken(StringBuilder result, Models.Entity entity, string viewLinkBaseUrl)
+        private static void ApplyViewLinkToken(StringBuilder result, Models.Entity entity, string? viewLinkBaseUrl)
         {
             if (result.Length == 0 || entity == null)
             {
@@ -315,7 +317,7 @@ namespace GIBS.Module.Entity.Helpers
             result.Append(content);
         }
 
-        private static void ApplyEditToken(StringBuilder result, Models.Entity entity, string editLinkBaseUrl)
+        private static void ApplyEditToken(StringBuilder result, Models.Entity entity, string? editLinkBaseUrl)
         {
             if (result.Length == 0 || entity == null)
             {
@@ -341,7 +343,7 @@ namespace GIBS.Module.Entity.Helpers
             result.Append(content);
         }
 
-        private static string ResolveHtmlTokenValue(EntityField field, string fieldValue)
+        private static string ResolveHtmlTokenValue(EntityField field, string? fieldValue)
         {
             if (!string.IsNullOrWhiteSpace(fieldValue))
             {
@@ -422,19 +424,19 @@ namespace GIBS.Module.Entity.Helpers
                 return ev.TextValue;
             }
             if (ev.IntegerValue.HasValue)
-                return ev.IntegerValue.ToString();
+                return ev.IntegerValue.Value.ToString();
             if (ev.LongValue.HasValue)
-                return ev.LongValue.ToString();
+                return ev.LongValue.Value.ToString();
             if (ev.DecimalValue.HasValue)
-                return ev.DecimalValue.ToString();
+                return ev.DecimalValue.Value.ToString();
             if (ev.BooleanValue.HasValue)
-                return ev.BooleanValue.ToString();
+                return ev.BooleanValue.Value.ToString();
             if (ev.DateValue.HasValue)
                 return ev.DateValue.Value.ToString("yyyy-MM-dd");
             if (ev.DateTimeValue.HasValue)
                 return ev.DateTimeValue.Value.ToString("yyyy-MM-dd HH:mm:ss");
             if (ev.GuidValue.HasValue)
-                return ev.GuidValue.ToString();
+                return ev.GuidValue.Value.ToString();
 
             return string.Empty;
         }
@@ -664,7 +666,7 @@ namespace GIBS.Module.Entity.Helpers
             result.Append(replaced);
         }
 
-        private static Dictionary<int, string> ParseCustomFieldValues(string settings)
+        private static Dictionary<int, string> ParseCustomFieldValues(string? settings)
         {
             if (string.IsNullOrWhiteSpace(settings))
             {

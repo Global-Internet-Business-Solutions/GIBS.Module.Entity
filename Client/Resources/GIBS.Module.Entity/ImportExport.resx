@@ -1,17 +1,17 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
-    
+
     Version 2.0
-    
+
     The primary goals of this format is to allow a simple XML format 
     that is mostly human readable. The generation and parsing of the 
     various data types are done through the TypeConverter classes 
     associated with the data types.
-    
+
     Example:
-    
+
     ... ado.net/XML headers & schema ...
     <resheader name="resmimetype">text/microsoft-resx</resheader>
     <resheader name="version">2.0</resheader>
@@ -26,29 +26,29 @@
         <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
         <comment>This is a comment</comment>
     </data>
-                
+
     There are any number of "resheader" rows that contain simple 
     name/value pairs.
-    
+
     Each data row contains a name, and value. The row also contains a 
     type or mimetype. Type corresponds to a .NET class that support 
     text/value conversion through the TypeConverter architecture. 
     Classes that don't support this are serialized and stored with the 
     mimetype set.
-    
+
     The mimetype is used for serialized objects, and tells the 
     ResXResourceReader how to depersist the object. This is currently not 
     extensible. For a given mimetype the value must be set accordingly:
-    
+
     Note - application/x-microsoft.net.object.binary.base64 is the format 
     that the ResXResourceWriter will generate, however the reader can 
     read any of the formats listed below.
-    
+
     mimetype: application/x-microsoft.net.object.binary.base64
     value   : The object must be serialized with 
             : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
             : and then encoded with base64 encoding.
-    
+
     mimetype: application/x-microsoft.net.object.soap.base64
     value   : The object must be serialized with 
             : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
@@ -117,58 +117,13 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="BackOffice_Description" xml:space="preserve">
-    <value>Entity Builder Dashboard</value>
+  <data name="ImportExport_Title" xml:space="preserve">
+    <value>Import / Export</value>
   </data>
-  <data name="BackOffice_Title" xml:space="preserve">
-    <value>BackOffice</value>
+  <data name="ImportExport_Description" xml:space="preserve">
+    <value>Manage schema and record import/export for this module instance.</value>
   </data>
-  <data name="BackToSite" xml:space="preserve">
-    <value>Return</value>
-  </data>
-  <data name="CardEntities" xml:space="preserve">
-    <value>Entity Records</value>
-  </data>
-  <data name="EntityRecordDescription" xml:space="preserve">
-    <value>Recent Entity Records</value>
-  </data>
-  <data name="EntityRecords" xml:space="preserve">
-    <value>Entity Records</value>
-  </data>
-  <data name="CardEntityTypes" xml:space="preserve">
-    <value>Entity Types</value>
-  </data>
-  <data name="EntityTypes_Description" xml:space="preserve">
-    <value>Custom Entity Types</value>
-  </data>
-  <data name="EntityTypes_Title" xml:space="preserve">
-    <value>Entity Types</value>
-  </data>
-  <data name="CardFieldGroups" xml:space="preserve">
-    <value>Field Groups</value>
-  </data>
-  <data name="FieldGroupsDescription" xml:space="preserve">
-    <value>Custom Field Groups</value>
-  </data>
-  <data name="CardFields" xml:space="preserve">
-    <value>Custom Fields</value>
-  </data>
-  <data name="Fields_Description" xml:space="preserve">
-    <value>Recent Custom Fields</value>
-  </data>
-  <data name="Fields_Title" xml:space="preserve">
-    <value>Custom Fields</value>
-  </data>
-  <data name="SelectEntityType" xml:space="preserve">
-    <value>Select Entity Type to Manage:</value>
-  </data>
-  <data name="AddNew" xml:space="preserve">
-    <value>Add New</value>
-  </data>
-  <data name="ImportExport" xml:space="preserve">
-    <value>Import/Export</value>
-  </data>
-  <data name="AddEntity" xml:space="preserve">
-    <value>Add New Record</value>
+  <data name="BackToBackOffice" xml:space="preserve">
+    <value>Back to BackOffice</value>
   </data>
 </root>

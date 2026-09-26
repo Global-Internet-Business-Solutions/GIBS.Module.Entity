@@ -94,6 +94,36 @@ namespace GIBS.Module.Entity.Controllers
             return Entity;
         }
 
+        // GET api/<controller>/ensurefolder?moduleid=x&basefolderid=y&entitytypekey=a&entitykeyorname=b
+        [HttpGet("ensurefolder")]
+        [Authorize(Policy = PolicyNames.EditModule)]
+        public async Task<int> EnsureFolder(int moduleid, int basefolderid, string entitytypekey, string entitykeyorname)
+        {
+            if (IsAuthorizedEntityId(EntityNames.Module, moduleid))
+            {
+                return await _EntityService.EnsureEntityUploadFolderAsync(moduleid, basefolderid, entitytypekey, entitykeyorname);
+            }
+
+            _logger.Log(LogLevel.Error, this, LogFunction.Security, "Unauthorized Entity EnsureFolder Attempt {ModuleId}", moduleid);
+            HttpContext.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+            return basefolderid;
+        }
+
+        // GET api/<controller>/movefile?moduleid=x&fileid=y&targetfolderid=z
+        [HttpGet("movefile")]
+        [Authorize(Policy = PolicyNames.EditModule)]
+        public async Task<int> MoveFile(int moduleid, int fileid, int targetfolderid)
+        {
+            if (IsAuthorizedEntityId(EntityNames.Module, moduleid))
+            {
+                return await _EntityService.MoveFileToFolderAsync(moduleid, fileid, targetfolderid);
+            }
+
+            _logger.Log(LogLevel.Error, this, LogFunction.Security, "Unauthorized Entity MoveFile Attempt {ModuleId} {FileId}", moduleid, fileid);
+            HttpContext.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+            return fileid;
+        }
+
         // DELETE api/<controller>/5
         [HttpDelete("{id}/{moduleid}")]
         [Authorize(Policy = PolicyNames.EditModule)]

@@ -322,6 +322,10 @@ else
         {
             await ClientEntityService.DeleteEntityAsync(Entity.EntityId, ModuleState.ModuleId);
             await logger.LogInformation("Entity Deleted {Entity}", Entity);
+
+            Index.ClearFeaturedCache(ModuleState.ModuleId);
+            await logger.LogDebug($"Cleared featured cache after deleting entity {Entity.EntityId} in module {ModuleState.ModuleId}");
+
             await LoadDataAsync();
             StateHasChanged();
         }
