@@ -27,6 +27,15 @@ namespace GIBS.Module.Entity.Repository
             base.OnModelCreating(builder);
 
             builder.Entity<Models.Entity>().ToTable(ActiveDatabase.RewriteName("GIBS_Entity"));
+            builder.Entity<Models.Entity>()
+                .Property(e => e.Latitude)
+                .HasPrecision(10, 7);
+            builder.Entity<Models.Entity>()
+                .Property(e => e.Longitude)
+                .HasPrecision(10, 7);
+            builder.Entity<Models.Entity>()
+                .Property(e => e.Rating)
+                .HasPrecision(18, 1);
             builder.Entity<Models.EntityType>().ToTable(ActiveDatabase.RewriteName("GIBS_EntityType"));
             builder.Entity<Models.EntityTemplate>().ToTable(ActiveDatabase.RewriteName("GIBS_EntityTemplate"));
             builder.Entity<Models.EntityFieldGroup>().ToTable(ActiveDatabase.RewriteName("GIBS_EntityFieldGroup"));

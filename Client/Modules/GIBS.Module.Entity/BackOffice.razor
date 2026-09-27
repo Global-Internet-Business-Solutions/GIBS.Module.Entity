@@ -23,7 +23,7 @@
                <div>
                <ActionLink Action="TemplatesIndex" Class="btn btn-outline-secondary" Text="Templates" Security="SecurityAccessLevel.Edit" ResourceKey="ManageTemplates" />
                <ActionLink Action="ImportExport" Class="btn btn-outline-secondary" Text="@Localizer["ImportExport"]" Security="SecurityAccessLevel.Edit" ResourceKey="ImportExport" />
-                    <ActionLink Action="Add" Security="SecurityAccessLevel.Edit" Text="Add Entity" Class="btn btn-warning" ResourceKey="AddEntity" />
+                    <ActionLink Action="Add" Security="SecurityAccessLevel.Edit" Text="@Localizer["AddEntity"]" Class="btn btn-warning" ResourceKey="AddEntity" />
                </div>
            </div>
         </div>
@@ -170,8 +170,8 @@
             <!-- Field Groups Management Card -->
             <div class="col-md-6 mb-4">
                 <div class="card h-100">
-                    <div class="card-header bg-info text-dark">
-                        <h5 class="mb-0"><i class="oi oi-layers"></i> @Localizer["FieldGroups"]</h5>
+                    <div class="card-header bg-info">
+                        <h5 class="mb-0 text-light"><i class="oi oi-layers"></i> @Localizer["FieldGroups"]</h5>
                     </div>
                     <div class="card-body">
                         <p class="card-text">@Localizer["FieldGroupsDescription"]</p>

@@ -171,4 +171,10 @@
   <data name="AddEntity" xml:space="preserve">
     <value>Add New Record</value>
   </data>
+  <data name="FieldGroups" xml:space="preserve">
+    <value>Field Groups</value>
+  </data>
+  <data name="RecentEntityTypes" xml:space="preserve">
+    <value>Entity Types Summary</value>
+  </data>
 </root>

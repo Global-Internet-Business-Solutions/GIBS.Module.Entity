@@ -40,6 +40,41 @@
             <input id="listingnumperpage" type="number" class="form-control" @bind="@_listingNumPerPage" min="1" />
         </div>
     </div>
+    <hr />
+    <h5>Map Settings</h5>
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="enablemap" HelpText="Enable map display for entity locations" ResourceKey="EnableMap" ResourceType="@resourceType">Enable Map: </Label>
+        <div class="col-sm-9">
+            <input id="enablemap" type="checkbox" class="form-check-input" @bind="@_enableMap" />
+        </div>
+    </div>
+
+
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="zoomlevel" HelpText="Zoom level of the map" ResourceKey="ZoomLevel" ResourceType="@resourceType">Zoom Level: </Label>
+        <div class="col-sm-9">
+            <input id="zoomlevel" type="number" class="form-control" @bind="@_zoomLevel" min="1" max="20" />
+        </div>
+    </div>
+
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="maptype" HelpText="Type of the map" ResourceKey="MapType" ResourceType="@resourceType">Map Type: </Label>
+        <div class="col-sm-9">
+            <select id="maptype" class="form-select" @bind="@_mapType">
+                <option value="roadmap">Roadmap</option>
+                <option value="satellite">Satellite</option>
+                <option value="hybrid">Hybrid</option>
+                <option value="terrain">Terrain</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="googlemapsapikey" HelpText="Google Maps API key for map and address lookup" ResourceKey="GoogleMapsApiKey" ResourceType="@resourceType">Google Maps API Key: </Label>
+        <div class="col-sm-9">
+            <input id="googlemapsapikey" type="text" class="form-control" @bind="@_googleMapsApiKey" />
+        </div>
+    </div>
 
     <hr />
     <h5>Image Upload Settings</h5>
@@ -111,6 +146,15 @@
     private int _imageMaxHeight = 900;
     private bool _showPhotoTitle = true;
 
+    private bool _enableMap;
+    private int _zoomLevel;
+    private string _mapType = "roadmap";
+    private string _googleMapsApiKey = string.Empty;
+
+
+
+
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -123,6 +167,11 @@
             _featuredNumPerPage = int.TryParse(SettingService.GetSetting(settings, "FeaturedNumPerPage", "10"), out var featuredNum) ? featuredNum : 10;
             _enableTypes = bool.TryParse(SettingService.GetSetting(settings, "EnableTypes", "true"), out var enableTypes) && enableTypes;
             _listingNumPerPage = int.TryParse(SettingService.GetSetting(settings, "ListingNumPerPage", "20"), out var listingNum) ? listingNum : 20;
+
+            _enableMap = bool.TryParse(SettingService.GetSetting(settings, "EnableMap", "false"), out var enableMap) && enableMap;
+            _zoomLevel = int.TryParse(SettingService.GetSetting(settings, "ZoomLevel", "10"), out var zoomLevel) ? zoomLevel : 10;
+            _mapType = SettingService.GetSetting(settings, "MapType", "roadmap");
+            _googleMapsApiKey = SettingService.GetSetting(settings, "GoogleMapsApiKey", string.Empty);
 
             // Load Image Upload Settings
             _fileFolderId = int.TryParse(SettingService.GetSetting(settings, "FileFolderId", "1"), out var fileFolderId) ? fileFolderId : 1;
@@ -148,6 +197,11 @@
             settings = SettingService.SetSetting(settings, "FeaturedNumPerPage", _featuredNumPerPage.ToString());
             settings = SettingService.SetSetting(settings, "EnableTypes", _enableTypes.ToString());
             settings = SettingService.SetSetting(settings, "ListingNumPerPage", _listingNumPerPage.ToString());
+
+            settings = SettingService.SetSetting(settings, "EnableMap", _enableMap.ToString());
+            settings = SettingService.SetSetting(settings, "ZoomLevel", _zoomLevel.ToString());
+            settings = SettingService.SetSetting(settings, "MapType", string.IsNullOrWhiteSpace(_mapType) ? "roadmap" : _mapType);
+            settings = SettingService.SetSetting(settings, "GoogleMapsApiKey", _googleMapsApiKey ?? string.Empty);
 
             // Save Image Upload Settings
             settings = SettingService.SetSetting(settings, "FileFolderId", _fileFolderId.ToString());

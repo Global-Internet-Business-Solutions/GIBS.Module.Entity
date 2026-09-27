@@ -58,6 +58,18 @@ namespace GIBS.Module.Entity.Models
 
         public bool IsFeatured { get; set; }
 
+        public int ViewCount { get; set; }
+
+        public decimal? Latitude { get; set; }
+
+        public decimal? Longitude { get; set; }
+
+        public decimal Rating { get; set; }
+
+        public int RatingCount { get; set; }
+
+        public int CommentCount { get; set; }
+
 
         // =========================================================
         // PUBLICATION

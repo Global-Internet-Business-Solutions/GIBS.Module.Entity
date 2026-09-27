@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Text;
@@ -28,6 +29,13 @@ namespace GIBS.Module.Entity.Helpers
     ///   [DateModified:format] - Entity.ModifiedOn with custom DateTime format
     ///   [SortOrder]         - Entity.SortOrder
     ///   [IsEnabled]         - Entity.IsEnabled
+    ///   [ViewCount]         - Entity.ViewCount
+    ///   [Latitude]          - Entity.Latitude
+    ///   [Longitude]         - Entity.Longitude
+    ///   [Map]               - Google map iframe using Entity.Latitude/Entity.Longitude (100% width, 450px height)
+    ///   [Rating]            - Entity.Rating
+    ///   [RatingCount]       - Entity.RatingCount
+    ///   [CommentCount]      - Entity.CommentCount
     ///   [Field:FieldKey]    - custom field value from Entity.Settings (legacy) or EntityValue table (comma-separated for multi-value)
     ///   [Field:FieldKey:Index] - indexed custom field value for multi-value fields (for example image list)
     ///   [FieldList:FieldKey] - unordered list (<ul><li>...</li></ul>) for multi-value fields
@@ -51,7 +59,10 @@ namespace GIBS.Module.Entity.Helpers
             IEnumerable<EntityField> fields,
             string? viewLinkBaseUrl = null,
             string? editLinkBaseUrl = null,
-            IEnumerable<EntityFieldGroup>? fieldGroups = null)
+            IEnumerable<EntityFieldGroup>? fieldGroups = null,
+            int mapZoomLevel = 13,
+            string? mapType = null,
+            string? googleMapsApiKey = null)
         {
             if (string.IsNullOrWhiteSpace(template) || entity == null)
             {
@@ -74,6 +85,13 @@ namespace GIBS.Module.Entity.Helpers
             ApplyDateToken(result, "DateModified", entity.ModifiedOn);
             result.Replace("[SortOrder]", entity.SortOrder.ToString());
             result.Replace("[IsEnabled]", entity.IsEnabled.ToString());
+            result.Replace("[ViewCount]", entity.ViewCount.ToString());
+            result.Replace("[Latitude]", entity.Latitude?.ToString() ?? string.Empty);
+            result.Replace("[Longitude]", entity.Longitude?.ToString() ?? string.Empty);
+            result.Replace("[Map]", BuildMapTokenValue(entity.Latitude, entity.Longitude, mapZoomLevel, mapType, googleMapsApiKey));
+            result.Replace("[Rating]", entity.Rating.ToString());
+            result.Replace("[RatingCount]", entity.RatingCount.ToString());
+            result.Replace("[CommentCount]", entity.CommentCount.ToString());
 
             var hasImages = fieldsByKey.Values.Any(field =>
                 field.EditorType == EntityEditorType.ImageUpload &&
@@ -131,7 +149,10 @@ namespace GIBS.Module.Entity.Helpers
             IEnumerable<EntityValue> entityValues,
             string? viewLinkBaseUrl = null,
             string? editLinkBaseUrl = null,
-            IEnumerable<EntityFieldGroup>? fieldGroups = null)
+            IEnumerable<EntityFieldGroup>? fieldGroups = null,
+            int mapZoomLevel = 13,
+            string? mapType = null,
+            string? googleMapsApiKey = null)
         {
             if (string.IsNullOrWhiteSpace(template) || entity == null)
             {
@@ -156,6 +177,13 @@ namespace GIBS.Module.Entity.Helpers
             ApplyDateToken(result, "DateModified", entity.ModifiedOn);
             result.Replace("[SortOrder]", entity.SortOrder.ToString());
             result.Replace("[IsEnabled]", entity.IsEnabled.ToString());
+            result.Replace("[ViewCount]", entity.ViewCount.ToString());
+            result.Replace("[Latitude]", entity.Latitude?.ToString() ?? string.Empty);
+            result.Replace("[Longitude]", entity.Longitude?.ToString() ?? string.Empty);
+            result.Replace("[Map]", BuildMapTokenValue(entity.Latitude, entity.Longitude, mapZoomLevel, mapType, googleMapsApiKey));
+            result.Replace("[Rating]", entity.Rating.ToString());
+            result.Replace("[RatingCount]", entity.RatingCount.ToString());
+            result.Replace("[CommentCount]", entity.CommentCount.ToString());
 
             var hasImages = fieldsByKey.Values.Any(field =>
                 field.EditorType == EntityEditorType.ImageUpload &&
@@ -351,6 +379,42 @@ namespace GIBS.Module.Entity.Helpers
             }
 
             return field?.HtmlContent ?? string.Empty;
+        }
+
+        private static string BuildMapTokenValue(decimal? latitude, decimal? longitude, int mapZoomLevel, string? mapType, string? googleMapsApiKey = null)
+        {
+            if (!latitude.HasValue || !longitude.HasValue)
+            {
+                return string.Empty;
+            }
+
+            var lat = latitude.Value.ToString(CultureInfo.InvariantCulture);
+            var lon = longitude.Value.ToString(CultureInfo.InvariantCulture);
+            var zoom = Math.Clamp(mapZoomLevel, 1, 20);
+
+            string src;
+            if (!string.IsNullOrWhiteSpace(googleMapsApiKey))
+            {
+                var embedMapType = string.Equals(mapType, "satellite", StringComparison.OrdinalIgnoreCase)
+                    ? "satellite"
+                    : "roadmap";
+
+                src = $"https://www.google.com/maps/embed/v1/place?key={Uri.EscapeDataString(googleMapsApiKey)}&q={lat},{lon}&zoom={zoom}&maptype={embedMapType}";
+            }
+            else
+            {
+                var mapTypeCode = mapType?.ToLowerInvariant() switch
+                {
+                    "satellite" => "k",
+                    "hybrid" => "h",
+                    "terrain" => "p",
+                    _ => "m"
+                };
+
+                src = $"https://maps.google.com/maps?ll={lat},{lon}&z={zoom}&t={mapTypeCode}&output=embed";
+            }
+
+            return $"<iframe title=\"Map\" src=\"{src}\" allowfullscreen style=\"width:100%;height:450px;border:1;\" loading=\"lazy\"></iframe>";
         }
 
         /// <summary>

@@ -1,4 +1,5 @@
 @using System.Text.Json
+@using System.Globalization
 @using Oqtane.Modules.Controls
 @using GIBS.Module.Entity.Services
 @using GIBS.Module.Entity.Models
@@ -19,6 +20,7 @@
 @inject IFileService FileService
 @inject IFolderService FolderService
 @inject IHtmlTextService HtmlTextService
+@inject IHttpClientFactory HttpClientFactory
 
 <form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
     <div class="container">
@@ -72,6 +74,70 @@
                 </select>
             </div>
         </div>
+
+        @if (_enableMap)
+        {
+            <div class="row mb-1 align-items-center">
+                <Label Class="col-sm-3" For="mapaddress" HelpText="Lookup latitude and longitude by address" ResourceKey="SearchByAddress">Search by address: </Label>
+                <div class="col-sm-9 d-flex gap-2">
+                    <input id="mapaddress" class="form-control" @bind="@_mapSearchAddress" />
+                    <button type="button" class="btn btn-outline-secondary" @onclick="LookupCoordinatesAsync" disabled="@(_isAddressLookupInProgress || string.IsNullOrWhiteSpace(_googleMapsApiKey))">Find Address</button>
+                </div>
+            </div>
+
+            <div class="row mb-1 align-items-center">
+                <Label Class="col-sm-3" For="latitude" HelpText="Latitude for this record" ResourceKey="Latitude">Latitude: </Label>
+                <div class="col-sm-9">
+                    <input id="latitude" type="number" class="form-control" @bind="@_latitude" step="0.0000001" />
+                </div>
+            </div>
+
+            <div class="row mb-1 align-items-center">
+                <Label Class="col-sm-3" For="longitude" HelpText="Longitude for this record" ResourceKey="Longitude">Longitude: </Label>
+                <div class="col-sm-9">
+                    <input id="longitude" type="number" class="form-control" @bind="@_longitude" step="0.0000001" />
+                </div>
+            </div>
+
+            @if (_latitude.HasValue && _longitude.HasValue)
+            {
+                <div class="row mb-2">
+                    <div class="offset-sm-3 col-sm-9">
+                        <iframe title="Entity Map" width="100%" height="450" style="border:0;" loading="lazy" src="@GetMapFallbackEmbedUrl()"></iframe>
+                    </div>
+                </div>
+            }
+
+            <hr />
+        }
+
+        <hr />
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="viewCount" HelpText="View Count for the record" ResourceKey="ViewCount">View Count: </Label>
+            <div class="col-sm-9">
+                <input id="viewCount" type="number" class="form-control" @bind="@_viewCount" step="0.000001" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="ratingCount" HelpText="Rating Count for the record" ResourceKey="RatingCount">Rating Count: </Label>
+            <div class="col-sm-9">
+                <input id="ratingCount" type="number" class="form-control" @bind="@_ratingCount" step="0.000001" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="rating" HelpText="Rating for the record" ResourceKey="Rating">Rating: </Label>
+            <div class="col-sm-9">
+                <input id="rating" type="number" class="form-control" @bind="@_rating" step="0.000001" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="commentCount" HelpText="Comment Count for the record" ResourceKey="CommentCount">Comment Count: </Label>
+            <div class="col-sm-9">
+                <input id="commentCount" type="number" class="form-control" @bind="@_commentCount" step="0.000001" />
+            </div>
+        </div>
+
+
         <!-- Custom Fields -->
         @if (_customFields.Any())
         {
@@ -363,7 +429,7 @@
 @code {
     public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
     public override string RenderMode => RenderModes.Interactive;
-     public override bool UseAdminContainer => false;
+    public override bool UseAdminContainer => false;
 
     public override string Actions => "Add,Edit";
 
@@ -371,7 +437,8 @@
 
     public override List<Resource> Resources => new List<Resource>()
     {
-        new Stylesheet("_content/GIBS.Module.Entity/Module.css")
+        new Stylesheet("_content/GIBS.Module.Entity/Module.css"),
+        new Script("_content/GIBS.Module.Entity/Module.js?v=3")
     };
 
     private ElementReference form;
@@ -433,6 +500,22 @@
     private int _currentImageFieldId = 0;
     private readonly Dictionary<string, int> _entityUploadFolderCache = new(StringComparer.OrdinalIgnoreCase);
 
+    private decimal? _longitude;
+    private decimal? _latitude;
+    private int _zoomLevel = 10;
+    private string _mapType = "roadmap";
+    private bool _enableMap;
+    private string _googleMapsApiKey = string.Empty;
+    private string _mapSearchAddress = string.Empty;
+    private bool _isAddressLookupInProgress;
+    private string _lastMapPreviewKey = string.Empty;
+    private bool _useIframeMapFallback;
+
+    private int _viewCount;
+    private int _ratingCount;
+    private decimal _rating;
+    private int _commentCount;
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -461,6 +544,12 @@
                     _publishStartDate = Entity.PublishStartDate;
                     _publishEndDate = Entity.PublishEndDate;
                     _settings = Entity.Settings ?? string.Empty;
+                    _viewCount = Entity.ViewCount;
+                    _latitude = Entity.Latitude;
+                    _longitude = Entity.Longitude;
+                    _rating = Entity.Rating;
+                    _ratingCount = Entity.RatingCount;
+                    _commentCount = Entity.CommentCount;
                     _createdby = Entity.CreatedBy;
                     _createdon = Entity.CreatedOn;
                     _modifiedby = Entity.ModifiedBy;
@@ -481,8 +570,14 @@
             // Load custom field definitions first
             await LoadCustomFieldsAsync();
 
-            // Load image upload settings
-            await LoadImageSettingsAsync();
+            // Load module settings
+            await LoadModuleSettings();
+
+            // Reset map preview state for each entity load/navigation.
+            // This prevents stale key/fallback state from suppressing map rendering
+            // for records that already contain valid coordinates.
+            _lastMapPreviewKey = string.Empty;
+            _useIframeMapFallback = false;
 
             // Then load saved custom field values (Edit mode)
             if (PageState.Action == "Edit")
@@ -498,33 +593,10 @@
         }
     }
 
-    // protected override async Task OnAfterRenderAsync(bool firstRender)
-    // {
-    //     try
-    //     {
-    //         if (firstRender)
-    //         {
-    //             await logger.LogInformation("OnAfterRenderAsync(firstRender=true) - page first loaded");
-    //             // Log all custom field values to diagnose content issues
-    //             await logger.LogInformation($"_customFieldValues contains {_customFieldValues.Count} items:");
-    //             foreach (var kvp in _customFieldValues.Where(kv => !string.IsNullOrEmpty(kv.Value)))
-    //             {
-    //                 var fieldName = _customFields.FirstOrDefault(f => f.FieldId == kvp.Key)?.Name ?? "Unknown";
-    //                 await logger.LogInformation($"  FieldId {kvp.Key} ({fieldName}): {kvp.Value.Substring(0, Math.Min(50, kvp.Value.Length))}...");
-    //             }
-    //         }
-    //         else
-    //         {
-    //             await logger.LogDebug("OnAfterRenderAsync(firstRender=false) - page re-rendered");
-    //         }
-    //     }
-    //     catch (Exception ex)
-    //     {
-    //         await logger.LogWarning(ex, "Error in OnAfterRenderAsync: {Error}", ex.Message);
-    //     }
-
-    //     await base.OnAfterRenderAsync(firstRender);
-    // }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+    }
 
     private async Task OnEntityTypeChanged()
     {
@@ -1762,6 +1834,12 @@
                     Entity.IsPublished = bool.Parse(_isPublished);
                     Entity.PublishStartDate = _publishStartDate;
                     Entity.PublishEndDate = _publishEndDate;
+                    Entity.ViewCount = _viewCount;
+                    Entity.Latitude = _latitude;
+                    Entity.Longitude = _longitude;
+                    Entity.Rating = _rating;
+                    Entity.RatingCount = _ratingCount;
+                    Entity.CommentCount = _commentCount;
                     Entity.Settings = "{}"; // Clear settings, use EntityValue instead
                     savedEntity = await ClientEntityService.AddEntityAsync(Entity);
                     await logger.LogInformation("Entity Added {Entity}", savedEntity);
@@ -1781,6 +1859,12 @@
                     Entity.IsPublished = bool.Parse(_isPublished);
                     Entity.PublishStartDate = _publishStartDate;
                     Entity.PublishEndDate = _publishEndDate;
+                    Entity.ViewCount = _viewCount;
+                    Entity.Latitude = _latitude;
+                    Entity.Longitude = _longitude;
+                    Entity.Rating = _rating;
+                    Entity.RatingCount = _ratingCount;
+                    Entity.CommentCount = _commentCount;
                     Entity.Settings = "{}"; // Clear settings, use EntityValue instead
                     await ClientEntityService.UpdateEntityAsync(Entity);
                     savedEntity = Entity;
@@ -1794,6 +1878,7 @@
 
                     // Always clear featured cache after save to prevent stale template output
                     Index.ClearFeaturedCache(ModuleState.ModuleId);
+                    Index.ClearAllFeaturedCaches();
                     await logger.LogDebug($"Cleared featured cache for module {ModuleState.ModuleId}");
                 }
 
@@ -1812,9 +1897,9 @@
     }
 
     /// <summary>
-    /// Load image upload settings from module settings
+    /// Load module settings
     /// </summary>
-    private async Task LoadImageSettingsAsync()
+    private async Task LoadModuleSettings()
     {
         try
         {
@@ -1825,10 +1910,154 @@
             _imageMaxWidth = int.TryParse(SettingService.GetSetting(settings, "ImageMaxWidth", "1600"), out var maxWidth) ? maxWidth : 1600;
             _imageMaxHeight = int.TryParse(SettingService.GetSetting(settings, "ImageMaxHeight", "900"), out var maxHeight) ? maxHeight : 900;
             _showPhotoTitle = bool.TryParse(SettingService.GetSetting(settings, "ShowPhotoTitle", "true"), out var showTitle) && showTitle;
+            _enableMap = bool.TryParse(SettingService.GetSetting(settings, "EnableMap", "false"), out var enableMap) && enableMap;
+            _googleMapsApiKey = SettingService.GetSetting(settings, "GoogleMapsApiKey", string.Empty);
+            _zoomLevel = int.TryParse(SettingService.GetSetting(settings, "ZoomLevel", "10"), out var zoomLevel) ? zoomLevel : 10;
+            _mapType = SettingService.GetSetting(settings, "MapType", "roadmap");
+            if (string.IsNullOrWhiteSpace(_mapType))
+            {
+                _mapType = "roadmap";
+            }
         }
         catch (Exception ex)
         {
-            await logger.LogError(ex, "Error Loading Image Settings {Error}", ex.Message);
+            await logger.LogError(ex, "Error Loading Module Settings {Error}", ex.Message);
+        }
+    }
+
+    private async Task LookupCoordinatesAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_mapSearchAddress))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_googleMapsApiKey))
+        {
+            AddModuleMessage("Google Maps API key is required for address lookup.", MessageType.Warning);
+            return;
+        }
+
+        try
+        {
+            _isAddressLookupInProgress = true;
+
+            var client = HttpClientFactory.CreateClient();
+            var requestUrl = $"https://maps.googleapis.com/maps/api/geocode/json?address={Uri.EscapeDataString(_mapSearchAddress)}&key={Uri.EscapeDataString(_googleMapsApiKey)}";
+            using var response = await client.GetAsync(requestUrl);
+            if (!response.IsSuccessStatusCode)
+            {
+                AddModuleMessage("Address lookup failed.", MessageType.Warning);
+                return;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync();
+            using var doc = await JsonDocument.ParseAsync(stream);
+
+            var status = doc.RootElement.TryGetProperty("status", out var statusElement) ? statusElement.GetString() : null;
+            if (!string.Equals(status, "OK", StringComparison.OrdinalIgnoreCase) ||
+                !doc.RootElement.TryGetProperty("results", out var resultsElement) ||
+                resultsElement.ValueKind != JsonValueKind.Array ||
+                resultsElement.GetArrayLength() == 0)
+            {
+                AddModuleMessage("Address not found.", MessageType.Warning);
+                return;
+            }
+
+            var firstResult = resultsElement[0];
+            if (firstResult.TryGetProperty("geometry", out var geometryElement) &&
+                geometryElement.TryGetProperty("location", out var locationElement) &&
+                locationElement.TryGetProperty("lat", out var latElement) &&
+                locationElement.TryGetProperty("lng", out var lngElement) &&
+                latElement.TryGetDecimal(out var lat) &&
+                lngElement.TryGetDecimal(out var lng))
+            {
+                _latitude = decimal.Round(lat, 7, MidpointRounding.AwayFromZero);
+                _longitude = decimal.Round(lng, 7, MidpointRounding.AwayFromZero);
+                _useIframeMapFallback = false;
+                _lastMapPreviewKey = string.Empty;
+            }
+            else
+            {
+                AddModuleMessage("Address lookup returned invalid coordinates.", MessageType.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error looking up coordinates {Error}", ex.Message);
+            AddModuleMessage("Address lookup failed.", MessageType.Error);
+        }
+        finally
+        {
+            _isAddressLookupInProgress = false;
+        }
+    }
+
+    private string GetMapFallbackEmbedUrl()
+    {
+        if (!_latitude.HasValue || !_longitude.HasValue)
+        {
+            return string.Empty;
+        }
+
+        var latitude = _latitude.Value.ToString(CultureInfo.InvariantCulture);
+        var longitude = _longitude.Value.ToString(CultureInfo.InvariantCulture);
+        var zoom = Math.Clamp(_zoomLevel, 1, 20);
+
+        if (!string.IsNullOrWhiteSpace(_googleMapsApiKey))
+        {
+            var embedMapType = string.Equals(_mapType, "satellite", StringComparison.OrdinalIgnoreCase)
+                ? "satellite"
+                : "roadmap";
+
+            return $"https://www.google.com/maps/embed/v1/place?key={Uri.EscapeDataString(_googleMapsApiKey)}&q={latitude},{longitude}&zoom={zoom}&maptype={embedMapType}";
+        }
+
+        var mapType = _mapType?.ToLowerInvariant() switch
+        {
+            "satellite" => "k",
+            "hybrid" => "h",
+            "terrain" => "p",
+            _ => "m"
+        };
+
+        return $"https://maps.google.com/maps?ll={latitude},{longitude}&z={zoom}&t={mapType}&output=embed";
+    }
+
+    private async Task RefreshMapPreviewAsync()
+    {
+        if (!_latitude.HasValue || !_longitude.HasValue || string.IsNullOrWhiteSpace(_googleMapsApiKey))
+        {
+            return;
+        }
+
+        var mapType = _mapType?.ToLowerInvariant() switch
+        {
+            "satellite" => "satellite",
+            "hybrid" => "hybrid",
+            "terrain" => "terrain",
+            _ => "roadmap"
+        };
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync(
+                "GIBS.Entity.renderMapPreview",
+                "entity-map-preview",
+                _latitude.Value,
+                _longitude.Value,
+                Math.Clamp(_zoomLevel, 1, 20),
+                mapType,
+                _googleMapsApiKey);
+
+            _useIframeMapFallback = false;
+        }
+        catch (Exception ex)
+        {
+            _useIframeMapFallback = true;
+            _lastMapPreviewKey = string.Empty;
+            await logger.LogWarning(ex, "Map preview JS interop failed. Falling back to iframe map.");
+            await InvokeAsync(StateHasChanged);
         }
     }
 

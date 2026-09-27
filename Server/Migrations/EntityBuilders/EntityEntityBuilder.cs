@@ -37,6 +37,12 @@ namespace GIBS.Module.Entity.Migrations.EntityBuilders
             Status = AddStringColumn(table, "Status", 50, true);
             IsEnabled = AddBooleanColumn(table, "IsEnabled", false, true);
             IsFeatured = AddBooleanColumn(table, "IsFeatured", false, false);
+            ViewCount = AddIntegerColumn(table, "ViewCount", false, 0);
+            Latitude = AddDecimalColumn(table, "Latitude", 10, 7, true);
+            Longitude = AddDecimalColumn(table, "Longitude", 10, 7, true);
+            Rating = AddDecimalColumn(table, "Rating", 18, 1, false, 0m);
+            RatingCount = AddIntegerColumn(table, "RatingCount", false, 0);
+            CommentCount = AddIntegerColumn(table, "CommentCount", false, 0);
             IsPublished = AddBooleanColumn(table, "IsPublished", false, false);
             PublishStartDate = AddDateTimeColumn(table, "PublishStartDate", true);
             PublishEndDate = AddDateTimeColumn(table, "PublishEndDate", true);
@@ -57,6 +63,12 @@ namespace GIBS.Module.Entity.Migrations.EntityBuilders
         public OperationBuilder<AddColumnOperation> Status { get; set; }
         public OperationBuilder<AddColumnOperation> IsEnabled { get; set; }
         public OperationBuilder<AddColumnOperation> IsFeatured { get; set; }
+        public OperationBuilder<AddColumnOperation> ViewCount { get; set; }
+        public OperationBuilder<AddColumnOperation> Latitude { get; set; }
+        public OperationBuilder<AddColumnOperation> Longitude { get; set; }
+        public OperationBuilder<AddColumnOperation> Rating { get; set; }
+        public OperationBuilder<AddColumnOperation> RatingCount { get; set; }
+        public OperationBuilder<AddColumnOperation> CommentCount { get; set; }
         public OperationBuilder<AddColumnOperation> IsPublished { get; set; }
         public OperationBuilder<AddColumnOperation> PublishStartDate { get; set; }
         public OperationBuilder<AddColumnOperation> PublishEndDate { get; set; }
