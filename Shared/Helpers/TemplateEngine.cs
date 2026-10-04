@@ -135,7 +135,7 @@ namespace GIBS.Module.Entity.Helpers
                 return GetIndexedValues(groupFieldValue);
             });
             ApplyViewLinkToken(result, entity, viewLinkBaseUrl);
-            ApplyEditToken(result, entity, editLinkBaseUrl);
+            ApplyEditToken(result, entity, editLinkBaseUrl, securityAccessLevel);
             return result.ToString();
         }
 
