@@ -1,5 +1,8 @@
 #nullable enable
 
+using GIBS.Module.Entity.Enums;
+using GIBS.Module.Entity.Models;
+using Oqtane.Shared;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -8,8 +11,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using GIBS.Module.Entity.Enums;
-using GIBS.Module.Entity.Models;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace GIBS.Module.Entity.Helpers
 {
@@ -38,15 +40,45 @@ namespace GIBS.Module.Entity.Helpers
     ///   [CommentCount]      - Entity.CommentCount
     ///   [Field:FieldKey]    - custom field value from Entity.Settings (legacy) or EntityValue table (comma-separated for multi-value)
     ///   [Field:FieldKey:Index] - indexed custom field value for multi-value fields (for example image list)
+    ///   [Field:FieldKey:format] - custom field value with DateTime format (e.g., [Field:BirthDate:yyyy-MM-dd], [Field:EventTime:MMMM dd, yyyy HH:mm])
     ///   [FieldList:FieldKey] - unordered list (<ul><li>...</li></ul>) for multi-value fields
     ///   [FieldGroup:FieldGroupKey] - two-column table (Label | Value) for fields in the specified group
     ///   [HtmlContent:FieldKey] - raw HTML from the record value, or field-level HtmlContent when no record value exists
     ///   [ViewLink]...[/ViewLink] - hyperlink to current page with ?detail=Entity.Key and class="viewLink"
-    ///   [Edit]              - edit hyperlink with pencil icon for current entity
+    ///   [Edit]              - edit hyperlink with pencil icon for current entity (requires SecurityAccessLevel.Edit or higher)
     ///   [HASFEATURED]...[/HASFEATURED] - shows block only when Entity.IsFeatured is true
     ///   [HASNOTFEATURED]...[/HASNOTFEATURED] - shows block only when Entity.IsFeatured is false
     ///   [HASIMAGES]...[/HASIMAGES] - shows block only when the record has ImageUpload values
     ///   [HASNOIMAGES]...[/HASNOIMAGES] - shows block only when the record has no ImageUpload values
+    ///   
+    /// Date formats . . . .
+    /// ////<!-- Date only -->
+    //// [Field:BirthDate:MM/dd/yyyy]           → 11/09/1990
+    //// [Field:BirthDate:dd/MM/yyyy]           → 09/11/1990
+    //// [Field:BirthDate:yyyy-MM-dd]           → 1990-11-09
+
+    //// <!-- Time only -->
+    //// [Field: StartTime:hh:mm tt]             → 04:00 PM
+    //// [Field:StartTime:HH:mm]                → 16:00 (24-hour format)
+
+    ////<!-- Date and Time -->
+    //// [Field: EventDateTime:MM/dd/yyyy hh:mm tt]     → 11/09/2026 04:00 PM
+    //// [Field:EventDateTime:MMMM dd, yyyy hh:mm tt]  → November 09, 2026 04:00 PM
+    //// [Field:EventDateTime:M / d / yyyy h:mm tt]        → 11/9/2026 4:00 PM
+    //// [Field:EventDateTime:yyyy - MM - dd HH:mm:ss]     → 2026-11-09 16:00:00
+
+    //// <!-- Long formats -->
+    //// [Field: EventDateTime:dddd, MMMM dd, yyyy]     → Monday, November 09, 2026
+    //// [Field: EventDateTime:G]                       → 11/9/2026 4:00:00 PM(General format)
+    //// [Field: EventDateTime:f]                       → Monday, November 9, 2026 4:00 PM(Full date/time)
+    ///
+    /// Key Notes for date and time formatting:
+    //•	hh = 12-hour format(01-12), use with tt for AM/PM
+    //•	HH = 24-hour format(00-23), don't use with tt
+    //•	m = minute without leading zero
+    //•	mm = minute with leading zero
+    //•	M = month without leading zero
+    /// 
     /// </summary>
     public static class TemplateEngine
     {
@@ -62,7 +94,8 @@ namespace GIBS.Module.Entity.Helpers
             IEnumerable<EntityFieldGroup>? fieldGroups = null,
             int mapZoomLevel = 13,
             string? mapType = null,
-            string? googleMapsApiKey = null)
+            string? googleMapsApiKey = null,
+            SecurityAccessLevel securityAccessLevel = SecurityAccessLevel.Anonymous)
         {
             if (string.IsNullOrWhiteSpace(template) || entity == null)
             {
@@ -123,6 +156,9 @@ namespace GIBS.Module.Entity.Helpers
                 // Supports indexed token, for example: [Field:photo:0]
                 ApplyIndexedFieldTokens(result, field.Key, indexedValues);
 
+                // Supports formatted date/datetime token, for example: [Field:birthdate:yyyy-MM-dd]
+                ApplyFormattedFieldTokens(result, field.Key, fieldValue);
+
                 if (template.Contains(htmlToken))
                 {
                     result.Replace(htmlToken, ResolveHtmlTokenValue(field, fieldValue));
@@ -152,7 +188,8 @@ namespace GIBS.Module.Entity.Helpers
             IEnumerable<EntityFieldGroup>? fieldGroups = null,
             int mapZoomLevel = 13,
             string? mapType = null,
-            string? googleMapsApiKey = null)
+            string? googleMapsApiKey = null,
+            SecurityAccessLevel securityAccessLevel = SecurityAccessLevel.Anonymous)
         {
             if (string.IsNullOrWhiteSpace(template) || entity == null)
             {
@@ -218,6 +255,9 @@ namespace GIBS.Module.Entity.Helpers
                 // Supports indexed token, for example: [Field:photo:0]
                 ApplyIndexedFieldTokens(result, field.Key, indexedValues);
 
+                // Supports formatted date/datetime token, for example: [Field:birthdate:yyyy-MM-dd]
+                ApplyFormattedFieldTokens(result, field.Key, fieldValue);
+
                 if (template.Contains(htmlToken))
                 {
                     result.Replace(htmlToken, ResolveHtmlTokenValue(field, fieldValue));
@@ -229,7 +269,7 @@ namespace GIBS.Module.Entity.Helpers
                     ? groupValues.SelectMany(v => GetIndexedValues(v)).Where(v => !string.IsNullOrWhiteSpace(v)).ToList()
                     : new List<string>());
             ApplyViewLinkToken(result, entity, viewLinkBaseUrl);
-            ApplyEditToken(result, entity, editLinkBaseUrl);
+            ApplyEditToken(result, entity, editLinkBaseUrl, securityAccessLevel);
             return result.ToString();
         }
 
@@ -345,7 +385,7 @@ namespace GIBS.Module.Entity.Helpers
             result.Append(content);
         }
 
-        private static void ApplyEditToken(StringBuilder result, Models.Entity entity, string? editLinkBaseUrl)
+        private static void ApplyEditToken(StringBuilder result, Models.Entity entity, string? editLinkBaseUrl, SecurityAccessLevel securityAccessLevel)
         {
             if (result.Length == 0 || entity == null)
             {
@@ -355,6 +395,15 @@ namespace GIBS.Module.Entity.Helpers
             var content = result.ToString();
             if (!Regex.IsMatch(content, @"\[Edit\]", RegexOptions.IgnoreCase))
             {
+                return;
+            }
+
+            // Only render edit link if user has Edit access level or higher
+            if (securityAccessLevel < SecurityAccessLevel.Edit)
+            {
+                content = Regex.Replace(content, @"\[Edit\]", string.Empty, RegexOptions.IgnoreCase);
+                result.Clear();
+                result.Append(content);
                 return;
             }
 
@@ -618,6 +667,72 @@ namespace GIBS.Module.Entity.Helpers
 
             result.Clear();
             result.Append(replaced);
+        }
+
+        private static void ApplyFormattedFieldTokens(StringBuilder result, string fieldKey, string? fieldValue)
+        {
+            if (string.IsNullOrWhiteSpace(fieldKey) || result.Length == 0 || string.IsNullOrWhiteSpace(fieldValue))
+            {
+                return;
+            }
+
+            var pattern = $@"\[Field:{Regex.Escape(fieldKey)}:([^\]]+)\]";
+            var content = result.ToString();
+
+            if (!Regex.IsMatch(content, pattern, RegexOptions.IgnoreCase))
+            {
+                return;
+            }
+
+            var replaced = Regex.Replace(content, pattern, match =>
+            {
+                var formatString = match.Groups[1].Value?.Trim();
+
+                // Skip if it's just a number (indexed token like [Field:key:0])
+                if (!string.IsNullOrWhiteSpace(formatString) && int.TryParse(formatString, out _))
+                {
+                    return match.Value; // Return original, let ApplyIndexedFieldTokens handle it
+                }
+
+                // Try to parse and format as DateTime
+                if (!string.IsNullOrWhiteSpace(formatString) && TryFormatAsDateTime(fieldValue, formatString, out var formatted))
+                {
+                    return formatted;
+                }
+
+                // If parsing fails or format is invalid, return original value
+                return fieldValue ?? string.Empty;
+            }, RegexOptions.IgnoreCase);
+
+            result.Clear();
+            result.Append(replaced);
+        }
+
+        private static bool TryFormatAsDateTime(string value, string format, out string formatted)
+        {
+            formatted = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(format))
+            {
+                return false;
+            }
+
+            // Try parsing as DateTime
+            if (DateTime.TryParse(value.Trim(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateTime))
+            {
+                try
+                {
+                    formatted = dateTime.ToString(format, CultureInfo.CurrentCulture);
+                    return true;
+                }
+                catch
+                {
+                    // Invalid format string
+                    return false;
+                }
+            }
+
+            return false;
         }
 
         private static void ApplyFeaturedConditionalBlocks(StringBuilder result, bool isFeatured)

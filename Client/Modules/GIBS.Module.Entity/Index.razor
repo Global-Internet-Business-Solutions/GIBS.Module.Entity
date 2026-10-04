@@ -45,17 +45,17 @@
 
                 @if (!string.IsNullOrEmpty(_detailTemplate.Header))
                 {
-                    @((MarkupString)TemplateEngine.Render(_detailTemplate.Header, _recordDetails, _entityFields, detailValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups, _mapZoomLevel, _mapType, _googleMapsApiKey))
+                    @((MarkupString)TemplateEngine.Render(_detailTemplate.Header, _recordDetails, _entityFields, detailValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups, _mapZoomLevel, _mapType, _googleMapsApiKey, GetUserAccessLevel()))
                 }
 
                 @if (!string.IsNullOrEmpty(_detailTemplate.Item))
                 {
-                    @((MarkupString)TemplateEngine.Render(_detailTemplate.Item, _recordDetails, _entityFields, detailValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups, _mapZoomLevel, _mapType, _googleMapsApiKey))
+                    @((MarkupString)TemplateEngine.Render(_detailTemplate.Item, _recordDetails, _entityFields, detailValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups, _mapZoomLevel, _mapType, _googleMapsApiKey, GetUserAccessLevel()))
                 }
 
                 @if (!string.IsNullOrEmpty(_detailTemplate.Footer))
                 {
-                    @((MarkupString)TemplateEngine.Render(_detailTemplate.Footer, _recordDetails, _entityFields, detailValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups, _mapZoomLevel, _mapType, _googleMapsApiKey))
+                    @((MarkupString)TemplateEngine.Render(_detailTemplate.Footer, _recordDetails, _entityFields, detailValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups, _mapZoomLevel, _mapType, _googleMapsApiKey, GetUserAccessLevel()))
                 }
             }
             else if (_showListing)
@@ -105,7 +105,7 @@
                                     ? _listingEntityValuesMap[record.EntityId]
                                     : new List<EntityValue>();
 
-                                var rendered = TemplateEngine.Render(templateContent, record, _entityFields, entityValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups, _mapZoomLevel, _mapType, _googleMapsApiKey);
+                                var rendered = TemplateEngine.Render(templateContent, record, _entityFields, entityValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups, _mapZoomLevel, _mapType, _googleMapsApiKey, GetUserAccessLevel());
                                 @((MarkupString)rendered)
                             }
 
@@ -147,7 +147,7 @@
                                 ? _entityValuesMap[record.EntityId]
                                 : new List<EntityValue>();
 
-                            var rendered = TemplateEngine.Render(templateContent, record, _entityFields, entityValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups, _mapZoomLevel, _mapType, _googleMapsApiKey);
+                            var rendered = TemplateEngine.Render(templateContent, record, _entityFields, entityValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups, _mapZoomLevel, _mapType, _googleMapsApiKey, GetUserAccessLevel());
                             @((MarkupString)rendered)
                         }
 
@@ -421,7 +421,7 @@
                 ? values
                 : new List<EntityValue>();
 
-            _pageTitle = TemplateEngine.Render(_featuredTemplate.PageTitle, featuredRecord, _entityFields, featuredValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups, _mapZoomLevel, _mapType, _googleMapsApiKey);
+            _pageTitle = TemplateEngine.Render(_featuredTemplate.PageTitle, featuredRecord, _entityFields, featuredValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups, _mapZoomLevel, _mapType, _googleMapsApiKey, GetUserAccessLevel());
         }
         else
         {
@@ -465,7 +465,7 @@
                         ? values
                         : new List<EntityValue>();
 
-                    _pageTitle = TemplateEngine.Render(_detailTemplate.PageTitle, _recordDetails, _entityFields, detailValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups, _mapZoomLevel, _mapType, _googleMapsApiKey);
+                    _pageTitle = TemplateEngine.Render(_detailTemplate.PageTitle, _recordDetails, _entityFields, detailValues, BuildCurrentPageUrl(), GetEditBaseUrl(), _entityFieldGroups, _mapZoomLevel, _mapType, _googleMapsApiKey, GetUserAccessLevel());
                     SetPageTitle(_pageTitle);
                 }
             }
@@ -883,6 +883,44 @@
         }
 
         return roots;
+    }
+
+    private SecurityAccessLevel GetUserAccessLevel()
+    {
+        // If user is not authenticated, they have Anonymous access
+        if (PageState?.User == null)
+        {
+            return Oqtane.Shared.SecurityAccessLevel.Anonymous;
+        }
+
+        // Host user always has Host access level
+        if (PageState.User.Username == "Host")
+        {
+            return Oqtane.Shared.SecurityAccessLevel.Host;
+        }
+
+        // Check if user has Admin role for this site
+        if (ModuleState?.PermissionList != null)
+        {
+            // Check for Edit permission in module permissions
+            var hasEditPermission = ModuleState.PermissionList.Any(p =>
+                string.Equals(p.PermissionName, "Edit", StringComparison.OrdinalIgnoreCase) &&
+                (p.RoleId.HasValue || p.UserId.HasValue)); // Check if user or role has this permission
+
+            if (hasEditPermission)
+            {
+                return Oqtane.Shared.SecurityAccessLevel.Edit;
+            }
+        }
+
+        // If page is in edit mode, user has at least Admin access
+        if (PageState?.EditMode == true)
+        {
+            return Oqtane.Shared.SecurityAccessLevel.Admin;
+        }
+
+        // Default to View access
+        return Oqtane.Shared.SecurityAccessLevel.View;
     }
 
     private RenderFragment RenderEntityTypeNavigation(IEnumerable<EntityType> entityTypes) => __builder =>

@@ -35,10 +35,7 @@
             <div class="col-sm-9">
                 <select id="parententitytypeid" class="form-select" @bind="@_parentEntityTypeId">
                     <option value="">@Localizer["None"]</option>
-                    @foreach (var type in _availableEntityTypes)
-                    {
-                        <option value="@type.EntityTypeId">@type.Name</option>
-                    }
+                    @RenderEntityTypeOptions(_availableEntityTypeTree, 0)
                 </select>
             </div>
         </div>
@@ -106,6 +103,7 @@
     private DateTime _modifiedOn;
     private string _mode => _entityTypeId == -1 ? Localizer["Add"] : Localizer["Edit"];
     private List<EntityType> _availableEntityTypes = new();
+    private List<EntityType> _availableEntityTypeTree = new();
 
 
 
@@ -138,6 +136,8 @@
                     _availableEntityTypes = _availableEntityTypes.Where(t => t.EntityTypeId != _entityTypeId).ToList();
                 }
             }
+
+            _availableEntityTypeTree = BuildEntityTypeTree(_availableEntityTypes);
         }
         catch (Exception ex)
         {
@@ -145,6 +145,62 @@
             AddModuleMessage(Localizer["Error.LoadEntityType"], MessageType.Error);
         }
     }
+
+    private List<EntityType> BuildEntityTypeTree(IEnumerable<EntityType> flatList)
+    {
+        var lookup = flatList.ToDictionary(x => x.EntityTypeId, x => x);
+        foreach (var item in lookup.Values)
+        {
+            item.Children ??= new List<EntityType>();
+            item.Children.Clear();
+        }
+
+        var rootItems = new List<EntityType>();
+
+        foreach (var item in flatList)
+        {
+            if (item.ParentEntityTypeId == null || !lookup.ContainsKey(item.ParentEntityTypeId.Value))
+            {
+                rootItems.Add(item);
+            }
+            else
+            {
+                lookup[item.ParentEntityTypeId.Value].Children.Add(item);
+            }
+        }
+
+        SortEntityTypes(rootItems);
+        return rootItems;
+    }
+
+    private void SortEntityTypes(List<EntityType> items)
+    {
+        items.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
+        foreach (var item in items)
+        {
+            if (item.Children != null && item.Children.Count > 0)
+            {
+                SortEntityTypes(item.Children);
+            }
+        }
+    }
+
+    private RenderFragment RenderEntityTypeOptions(IEnumerable<EntityType> items, int level = 0) => builder =>
+    {
+        int seq = 0;
+        foreach (var item in items)
+        {
+            builder.OpenElement(seq++, "option");
+            builder.AddAttribute(seq++, "value", item.EntityTypeId);
+            builder.AddContent(seq++, new string('\u00A0', level * 4) + item.Name);
+            builder.CloseElement();
+
+            if (item.Children != null && item.Children.Count > 0)
+            {
+                builder.AddContent(seq++, RenderEntityTypeOptions(item.Children, level + 1));
+            }
+        }
+    };
 
     private async Task SaveEntityType()
     {
@@ -187,7 +243,7 @@
                     await logger.LogInformation("Entity Type Added {EntityType}", entityType);
                 }
 
-                NavigationManager.NavigateTo(NavigateUrl());
+                NavigationManager.NavigateTo(NavigateUrl(ModuleState.ModuleId, "EntityTypesIndex"));
             }
             catch (Exception ex)
             {

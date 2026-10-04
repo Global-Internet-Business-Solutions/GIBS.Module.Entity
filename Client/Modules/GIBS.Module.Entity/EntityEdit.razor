@@ -41,7 +41,7 @@
         <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="name" HelpText="Enter a name" ResourceKey="Name">Name: </Label>
             <div class="col-sm-9">
-                <input id="name" class="form-control" @bind="@_name" maxlength="256" required />
+                <input id="name" class="form-control" @bind="@_name" @bind:after="OnNameChanged" maxlength="256" required />
             </div>
         </div>
 
@@ -111,31 +111,6 @@
             <hr />
         }
 
-        <hr />
-        <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="viewCount" HelpText="View Count for the record" ResourceKey="ViewCount">View Count: </Label>
-            <div class="col-sm-9">
-                <input id="viewCount" type="number" class="form-control" @bind="@_viewCount" step="0.000001" />
-            </div>
-        </div>
-        <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="ratingCount" HelpText="Rating Count for the record" ResourceKey="RatingCount">Rating Count: </Label>
-            <div class="col-sm-9">
-                <input id="ratingCount" type="number" class="form-control" @bind="@_ratingCount" step="0.000001" />
-            </div>
-        </div>
-        <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="rating" HelpText="Rating for the record" ResourceKey="Rating">Rating: </Label>
-            <div class="col-sm-9">
-                <input id="rating" type="number" class="form-control" @bind="@_rating" step="0.000001" />
-            </div>
-        </div>
-        <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="commentCount" HelpText="Comment Count for the record" ResourceKey="CommentCount">Comment Count: </Label>
-            <div class="col-sm-9">
-                <input id="commentCount" type="number" class="form-control" @bind="@_commentCount" step="0.000001" />
-            </div>
-        </div>
 
 
         <!-- Custom Fields -->
@@ -409,8 +384,35 @@
             </div>
         </div>
 
-        <!-- Settings (JSON) -->
+                <hr />
         <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="viewCount" HelpText="View Count for the record" ResourceKey="ViewCount">View Count: </Label>
+            <div class="col-sm-9">
+                <input id="viewCount" type="number" class="form-control" @bind="@_viewCount" step="0.000001" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="ratingCount" HelpText="Rating Count for the record" ResourceKey="RatingCount">Rating Count: </Label>
+            <div class="col-sm-9">
+                <input id="ratingCount" type="number" class="form-control" @bind="@_ratingCount" step="0.000001" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="rating" HelpText="Rating for the record" ResourceKey="Rating">Rating: </Label>
+            <div class="col-sm-9">
+                <input id="rating" type="number" class="form-control" @bind="@_rating" step="0.000001" />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="commentCount" HelpText="Comment Count for the record" ResourceKey="CommentCount">Comment Count: </Label>
+            <div class="col-sm-9">
+                <input id="commentCount" type="number" class="form-control" @bind="@_commentCount" step="0.000001" />
+            </div>
+        </div>
+
+
+        <!-- Settings (JSON) -->
+        <div class="row mb-1 align-items-start">
             <Label Class="col-sm-3" For="settings" HelpText="Additional settings in JSON format" ResourceKey="Settings">Settings: </Label>
             <div class="col-sm-9">
                 <textarea id="settings" class="form-control" @bind="@_settings" rows="4"></textarea>
@@ -622,100 +624,22 @@
         {
             _customFieldBoolValues[kvp.Key] = kvp.Value;
         }
+    }
 
-        // If editing an existing entity, load values from database ONLY for fields not yet populated
-        // This handles fields that are new to the child type
-        if (PageState.Action == "Edit" && _id > 0)
+    private async Task OnNameChanged()
+    {
+        _key = await KeyHelper.GenerateUniqueKeyAsync(_name, IsEntityKeyInUseAsync);
+    }
+
+    private async Task<bool> IsEntityKeyInUseAsync(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
         {
-            try
-            {
-                var dbValues = await EntityValueService.GetAllEntityValuesAsync(_id);
-                await logger.LogInformation($"Loading missing fields from database - Retrieved {dbValues.Count} EntityValue records");
-
-                // Build field lookup
-                var allFieldsLookup = new Dictionary<int, EntityField>();
-                var effectiveTypeIds = GetEffectiveEntityTypeIds(_entityTypeId);
-
-                foreach (var typeId in effectiveTypeIds)
-                {
-                    var fields = await EntityFieldService.GetFieldsAsync(typeId, ModuleState.ModuleId);
-                    foreach (var field in fields.Where(f => f.IsEnabled))
-                    {
-                        if (!allFieldsLookup.ContainsKey(field.FieldId))
-                        {
-                            allFieldsLookup[field.FieldId] = field;
-                        }
-                    }
-                }
-
-                // Load database values ONLY for fields that don't have values yet
-                foreach (var fieldGroup in dbValues.GroupBy(ev => ev.FieldId))
-                {
-                    var fieldId = fieldGroup.Key;
-
-                    // Skip if we already have a value for this field (from sync or previous state)
-                    if (_customFieldValues.ContainsKey(fieldId) && !string.IsNullOrEmpty(_customFieldValues[fieldId]))
-                    {
-                        await logger.LogDebug($"  FieldId {fieldId}: Already has value, skipping database load");
-                        continue;
-                    }
-
-                    var field = _customFields.FirstOrDefault(cf => cf.FieldId == fieldId);
-                    if (field == null && allFieldsLookup.TryGetValue(fieldId, out var hierarchyField))
-                    {
-                        field = hierarchyField;
-                    }
-
-                    if (field == null)
-                    {
-                        await logger.LogWarning($"  FieldId {fieldId}: Field not found, skipping");
-                        continue;
-                    }
-
-                    var values = fieldGroup.OrderBy(v => v.ValueIndex).ToList();
-                    await logger.LogInformation($"  Loading FieldId {fieldId}: {values.Count} values from database");
-
-                    if (field.IsMultiValue)
-                    {
-                        var stringValues = values.Select(v => GetStringValueFromEntityValue(v)).ToList();
-                        _customFieldValues[fieldId] = string.Join(",", stringValues);
-                        await logger.LogDebug($"    Multi-value: {_customFieldValues[fieldId]}");
-                    }
-                    else if (values.Any())
-                    {
-                        var firstValue = values.First();
-
-                        if (field.EditorType == EntityEditorType.Checkbox || field.EditorType == EntityEditorType.Toggle)
-                        {
-                            _customFieldBoolValues[fieldId] = firstValue.BooleanValue ?? false;
-                        }
-                        else
-                        {
-                            _customFieldValues[fieldId] = GetStringValueFromEntityValue(firstValue);
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                await logger.LogWarning(ex, "Error loading missing field values from database: {Error}", ex.Message);
-            }
+            return false;
         }
 
-        var allEntities = await ClientEntityService.GetEntitysAsync(ModuleState.ModuleId);
-        if (PageState.Action == "Edit")
-        {
-            _availableParentEntities = allEntities.Where(e => e.EntityId != _id && e.EntityTypeId == _entityTypeId).ToList();
-        }
-        else
-        {
-            _availableParentEntities = allEntities.Where(e => e.EntityTypeId == _entityTypeId).ToList();
-        }
-
-        _htmlEditorRenderVersion++;
-
-        // Force Blazor to re-render with the new state
-        StateHasChanged();
+        var entities = await ClientEntityService.GetEntitysAsync(ModuleState.ModuleId);
+        return entities.Any(entity => entity.EntityId != _id && string.Equals(entity.Key, key, StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task LoadCustomFieldsAsync()
@@ -1814,6 +1738,8 @@
             {
                 await SyncHtmlEditorValuesAsync();
                 SyncCustomFieldValuesToDictionary();
+
+                _key = await KeyHelper.GenerateUniqueKeyAsync(_name, IsEntityKeyInUseAsync);
 
                 Entity? savedEntity = null;
 

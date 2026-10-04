@@ -19,7 +19,7 @@
         <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="name" HelpText="Internal name of the field" ResourceKey="Name">Name:</Label>
             <div class="col-sm-9">
-                <input id="name" class="form-control" @bind="@_name" maxlength="100" required />
+                <input id="name" class="form-control" @bind="@_name" @bind:after="OnNameChanged" maxlength="100" required />
             </div>
         </div>
         <div class="row mb-1 align-items-center">
@@ -414,6 +414,22 @@
         _dataType = GetDefaultDataTypeForEditorType(_editorType);
     }
 
+    private async Task OnNameChanged()
+    {
+        _key = await KeyHelper.GenerateUniqueKeyAsync(_name, IsFieldKeyInUseAsync);
+    }
+
+    private async Task<bool> IsFieldKeyInUseAsync(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key) || _entityTypeId <= 0)
+        {
+            return false;
+        }
+
+        var existingField = await EntityFieldService.GetFieldByKeyAsync(_entityTypeId, key, ModuleState.ModuleId);
+        return existingField != null && existingField.FieldId != _fieldId;
+    }
+
     private static string GetDefaultDataTypeForEditorType(string editorType)
     {
         if (!Enum.TryParse<EntityEditorType>(editorType, true, out var parsedEditorType))
@@ -599,6 +615,8 @@
                     htmlContent = await _richTextEditor.GetHtml();
                     _htmlContent = htmlContent ?? string.Empty;
                 }
+
+                _key = await KeyHelper.GenerateUniqueKeyAsync(_name, IsFieldKeyInUseAsync);
 
                 field.Name = _name;
                 field.Key = _key;
