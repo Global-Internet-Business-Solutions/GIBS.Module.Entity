@@ -5,6 +5,7 @@
 @inject IStringLocalizer<Settings> Localizer
 @inject IFolderService FolderService
 
+
 <div class="container">
     <div class="row mb-1 align-items-center">
         <Label Class="col-sm-3" For="customtitle" HelpText="Custom title to display on the page" ResourceKey="CustomTitle" ResourceType="@resourceType">Custom Title: </Label>
@@ -139,7 +140,7 @@
 
      private List<Folder> _folders = new List<Folder>();
     // Image Upload Settings
-    private int _fileFolderId = 1;
+    private int _fileFolderId = -1;
     private int _imageThumbWidth = 360;
     private int _imageThumbHeight = 360;
     private int _imageMaxWidth = 1600;
@@ -151,7 +152,7 @@
     private string _mapType = "roadmap";
     private string _googleMapsApiKey = string.Empty;
 
-
+    private int _rootFolderId;
 
 
 
@@ -159,6 +160,14 @@
     {
         try
         {
+            // Passing an empty string "" returns the site root folder
+            var rootFolder = await FolderService.GetFolderAsync(SiteState.Properties.SiteId, "");
+
+            if (rootFolder != null)
+            {
+                _rootFolderId = rootFolder.FolderId;
+            }
+
             _folders = await FolderService.GetFoldersAsync(PageState.Site.SiteId);
 
             Dictionary<string, string> settings = await SettingService.GetModuleSettingsAsync(ModuleState.ModuleId);
@@ -174,7 +183,7 @@
             _googleMapsApiKey = SettingService.GetSetting(settings, "GoogleMapsApiKey", string.Empty);
 
             // Load Image Upload Settings
-            _fileFolderId = int.TryParse(SettingService.GetSetting(settings, "FileFolderId", "1"), out var fileFolderId) ? fileFolderId : 1;
+            _fileFolderId = int.TryParse(SettingService.GetSetting(settings, "FileFolderId", _rootFolderId.ToString()), out var fileFolderId) ? fileFolderId : _rootFolderId;
             _imageThumbWidth = int.TryParse(SettingService.GetSetting(settings, "ImageThumbWidth", "360"), out var thumbWidth) ? thumbWidth : 360;
             _imageThumbHeight = int.TryParse(SettingService.GetSetting(settings, "ImageThumbHeight", "360"), out var thumbHeight) ? thumbHeight : 360;
             _imageMaxWidth = int.TryParse(SettingService.GetSetting(settings, "ImageMaxWidth", "1600"), out var maxWidth) ? maxWidth : 1600;

@@ -1,4 +1,3 @@
-@using Oqtane.Modules.Controls
 @using GIBS.Module.Entity.Services
 @using GIBS.Module.Entity.Models
 @using GIBS.Module.Entity.Helpers
@@ -8,6 +7,8 @@
 @inject NavigationManager NavigationManager
 @inject IEntityTemplateService EntityTemplateService
 @inject IEntityTypeService EntityTypeService
+@inject IEntityFieldService EntityFieldService
+@inject IEntityFieldGroupService EntityFieldGroupService
 @inject IStringLocalizer<TemplatesEdit> Localizer
 
 <form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
@@ -25,7 +26,7 @@
         <div class="row mb-1 align-items-center">
             <Label Class="col-sm-3" For="entitytypeid" HelpText="Optional entity type scope for this template" ResourceKey="EntityType">Entity Type:</Label>
             <div class="col-sm-9">
-                <select id="entitytypeid" class="form-select" @bind="@_entityTypeId">
+                <select id="entitytypeid" class="form-select" @bind="@_entityTypeId" @bind:after="OnEntityTypeChanged">
                     <option value="">Default (All Types)</option>
                     @foreach (var entityType in _entityTypes.OrderBy(x => x.SortOrder).ThenBy(x => x.Name))
                     {
@@ -37,19 +38,57 @@
 
         <hr />
 
-        <p class="text-muted small">Use tokens like <code>[Name]</code>, <code>[Status]</code>, <code>[Field:FieldKey]</code>, <code>[HtmlContent:FieldKey]</code></p>
+        <p class="text-muted small mb-1">Available tokens for the current schema:</p>
+        <div class="small mb-2">
+            @foreach (var token in _availableTokens)
+            {
+                <code class="me-1">@token</code>
+            }
+        </div>
+        <div class="row mb-3 align-items-start">
+            <div class="col-sm-3"></div>
+            <div class="col-sm-9">
+                
+                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="CopyTemplateTokenGuide">Copy Tokens + Field Tokens</button>
+                <p class="text-muted small mt-2 mb-2">Copy combined fields and tokens to create a template for your entity items. The <code>Header</code> and <code>Footer</code> sections are rendered once, while the <code>Item</code> section is rendered for each item. The <code>Alternate</code> section is rendered for alternating items (if applicable). The <code>Separator</code> is rendered between items.</p>
+
+                <p class="text-muted small mb-1">Available Field Keys as <code>[Field:FieldKey]</code>:</p>
+                @if (_availableFieldTokens.Any())
+                {
+                    <div class="small mb-2">
+                        @foreach (var fieldToken in _availableFieldTokens)
+                        {
+                            <code class="me-1">@fieldToken</code>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="text-muted small mb-2">Select an Entity Type to load field keys.</p>
+                }
+
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CopyFieldTokens">Copy [Field:FieldKey] Tokens</button>
+            </div>
+        </div>
+
+        <div class="row mb-3 align-items-start">
+            <div class="col-sm-3"></div>
+            <div class="col-sm-9">
+        <button type="button" class="btn btn-outline-primary btn-sm" @onclick="CombineAndCopyCurrentValues">Combine and Copy Current Values</button>
+            </div>
+        </div>
 
 
         <div class="row mb-1 align-items-start">
             <Label Class="col-sm-3" For="header" HelpText="Template content rendered before items" ResourceKey="Header">Header:</Label>
             <div class="col-sm-9">
-                <RichTextEditor @ref="_headerEditor" Content="@_header" />
+                <textarea id="header" class="form-control" @bind="@_header" rows="6"></textarea>
             </div>
         </div>
         <div class="row mb-1 align-items-start">
             <Label Class="col-sm-3" For="item" HelpText="Template content rendered for each item" ResourceKey="Item">Item:</Label>
             <div class="col-sm-9">
-                <RichTextEditor @ref="_itemEditor" Content="@_item" />
+                <textarea id="item" class="form-control" @bind="@_item" rows="10"></textarea>
             </div>
         </div>
         @if (ShowAlternateTemplate)
@@ -57,7 +96,7 @@
             <div class="row mb-1 align-items-start">
                 <Label Class="col-sm-3" For="alternate" HelpText="Template content for alternating rows" ResourceKey="Alternate">Alternate:</Label>
                 <div class="col-sm-9">
-                    <RichTextEditor @ref="_alternateEditor" Content="@_alternate" />
+                    <textarea id="alternate" class="form-control" @bind="@_alternate" rows="10"></textarea>
                 </div>
             </div>
 
@@ -71,7 +110,7 @@
         <div class="row mb-1 align-items-start">
             <Label Class="col-sm-3" For="footer" HelpText="Template content rendered after items" ResourceKey="Footer">Footer:</Label>
             <div class="col-sm-9">
-                <RichTextEditor @ref="_footerEditor" Content="@_footer" />
+                <textarea id="footer" class="form-control" @bind="@_footer" rows="6"></textarea>
             </div>
         </div>
         <hr />
@@ -130,20 +169,20 @@
     private string _pageKeywords = string.Empty;
     private string _pageHeader = string.Empty;
 
-    private RichTextEditor _headerEditor;
-    private RichTextEditor _itemEditor;
-    private RichTextEditor _alternateEditor;
-    private RichTextEditor _footerEditor;
-
     private string _createdBy;
     private DateTime _createdOn;
     private string _modifiedBy;
     private DateTime _modifiedOn;
     private List<EntityType> _entityTypes = new();
+    private List<string> _availableTokens = new();
+    private List<string> _availableFieldTokens = new();
 
     private bool ShowAlternateTemplate => !string.Equals(_templateType, "Detail", StringComparison.OrdinalIgnoreCase);
 
-    
+    private async Task OnEntityTypeChanged()
+    {
+        await LoadAvailableTokensAsync();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -177,11 +216,191 @@
             {
                 _templateId = -1;
             }
+
+            await LoadAvailableTokensAsync();
         }
         catch (Exception ex)
         {
             await logger.LogError(ex, "Error Loading Template {TemplateId} {Error}", _templateId, ex.Message);
             AddModuleMessage(Localizer["Message.LoadError"], MessageType.Error);
+        }
+    }
+
+    private async Task LoadAvailableTokensAsync()
+    {
+        var tokens = new List<string>
+        {
+            "[Name]",
+            "[Description]",
+            "[Key]",
+            "[Status]",
+            "[IsFeatured]",
+            "[Type]",
+            "[TypeDescription]",
+            "[DateCreated]",
+            "[DateCreated:MM/dd/yyyy]",
+            "[DateModified]",
+            "[DateModified:MM/dd/yyyy]",
+            "[SortOrder]",
+            "[IsEnabled]",
+            "[ViewCount]",
+            "[Latitude]",
+            "[Longitude]",
+            "[Map]",
+            "[Rating]",
+            "[RatingCount]",
+            "[CommentCount]",
+            "[ViewLink]...[/ViewLink]",
+            "[Edit]",
+            "[HASFEATURED]...[/HASFEATURED]",
+            "[HASNOTFEATURED]...[/HASNOTFEATURED]",
+            "[HASIMAGES]...[/HASIMAGES]",
+            "[HASNOIMAGES]...[/HASNOIMAGES]",
+            "[Field:FieldKey]",
+            "[CustomField:FieldKey]",
+            "[Field:FieldKey:0]",
+            "[Field:FieldKey:yyyy-MM-dd]",
+            "[FieldList:FieldKey]",
+            "[HtmlContent:FieldKey]",
+            "[FieldGroup:FieldGroupKey]",
+            "[FieldGroup:FieldGroupKey:Download]"
+        };
+
+        var fieldTokens = new List<string>();
+
+        if (int.TryParse(_entityTypeId, out var entityTypeId) && entityTypeId > 0)
+        {
+            var fields = await EntityFieldService.GetFieldsAsync(entityTypeId, ModuleState.ModuleId) ?? new List<EntityField>();
+            foreach (var field in fields.Where(f => !string.IsNullOrWhiteSpace(f.Key)).OrderBy(f => f.SortOrder).ThenBy(f => f.Name))
+            {
+                var fieldToken = $"[Field:{field.Key}]";
+                fieldTokens.Add(fieldToken);
+                tokens.Add(fieldToken);
+                tokens.Add($"[CustomField:{field.Key}]");
+                tokens.Add($"[Field:{field.Key}:0]");
+                tokens.Add($"[Field:{field.Key}:yyyy-MM-dd]");
+                tokens.Add($"[FieldList:{field.Key}]");
+                tokens.Add($"[HtmlContent:{field.Key}]");
+            }
+
+            var fieldGroups = await EntityFieldGroupService.GetFieldGroupsAsync(entityTypeId, ModuleState.ModuleId) ?? new List<EntityFieldGroup>();
+            foreach (var fieldGroup in fieldGroups.Where(g => !string.IsNullOrWhiteSpace(g.Key)).OrderBy(g => g.SortOrder).ThenBy(g => g.Name))
+            {
+                tokens.Add($"[FieldGroup:{fieldGroup.Key}]");
+                tokens.Add($"[FieldGroup:{fieldGroup.Key}:Download]");
+            }
+        }
+
+        _availableFieldTokens = fieldTokens
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(token => token, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _availableTokens = tokens
+            .Where(token => !string.IsNullOrWhiteSpace(token))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(token => token, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private async Task CopyTemplateTokenGuide()
+    {
+        try
+        {
+            if (_availableTokens.Count == 0)
+            {
+                await LoadAvailableTokensAsync();
+            }
+
+            var message = string.Join(Environment.NewLine, new[]
+            {
+                "Template Token Reference",
+                "",
+                "Header and Footer render once.",
+                "Item renders for each item.",
+                "Alternate renders for alternating items when applicable.",
+                "Separator renders between items.",
+                "",
+                "Available tokens:",
+                string.Join(Environment.NewLine, _availableTokens)
+            });
+
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", message);
+            AddModuleMessage("Token reference copied to clipboard.", MessageType.Success);
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error copying token reference {Error}", ex.Message);
+            AddModuleMessage("Unable to copy token reference.", MessageType.Error);
+        }
+    }
+
+    private async Task CopyFieldTokens()
+    {
+        try
+        {
+            if (_availableFieldTokens.Count == 0)
+            {
+                await LoadAvailableTokensAsync();
+            }
+
+            if (!_availableFieldTokens.Any())
+            {
+                AddModuleMessage("No field keys available. Select an Entity Type first.", MessageType.Warning);
+                return;
+            }
+
+            var message = string.Join(Environment.NewLine, _availableFieldTokens);
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", message);
+            AddModuleMessage("Field tokens copied to clipboard.", MessageType.Success);
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error copying field tokens {Error}", ex.Message);
+            AddModuleMessage("Unable to copy field tokens.", MessageType.Error);
+        }
+    }
+
+    private async Task CombineAndCopyCurrentValues()
+    {
+        try
+        {
+            var entityTypeName = _entityTypes
+                .FirstOrDefault(x => x.EntityTypeId.ToString() == _entityTypeId)?.Name ?? "Default (All Types)";
+
+            var sections = new List<string>
+            {
+                $"<!-- TemplateType: {_templateType} -->",
+                $"<!-- EntityType: {entityTypeName} -->",
+                "",
+                "<!-- [Header] -->",
+                _header ?? string.Empty,
+                "",
+                "<!-- [Item] -->",
+                _item ?? string.Empty
+            };
+
+            if (ShowAlternateTemplate)
+            {
+                sections.Add("");
+                sections.Add("<!-- [Alternate] -->");
+                sections.Add(_alternate ?? string.Empty);
+                sections.Add("");
+                sections.Add("<!-- [Separator] -->");
+                sections.Add(_separator ?? string.Empty);
+            }
+
+            sections.Add("");
+            sections.Add("<!-- [Footer] -->");
+            sections.Add(_footer ?? string.Empty);
+
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", string.Join(Environment.NewLine, sections));
+            AddModuleMessage("Current template values copied to clipboard.", MessageType.Success);
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error copying current template values {Error}", ex.Message);
+            AddModuleMessage("Unable to copy current template values.", MessageType.Error);
         }
     }
 
@@ -208,11 +427,11 @@
 
                 template.TemplateType = _templateType;
                 template.EntityTypeId = int.TryParse(_entityTypeId, out var entityTypeId) ? entityTypeId : null;
-                template.Header = _headerEditor != null ? await _headerEditor.GetHtml() : _header;
-                template.Item = _itemEditor != null ? await _itemEditor.GetHtml() : _item;
-                template.Alternate = _alternateEditor != null ? await _alternateEditor.GetHtml() : _alternate;
+                template.Header = _header;
+                template.Item = _item;
+                template.Alternate = _alternate;
                 template.Separator = _separator;
-                template.Footer = _footerEditor != null ? await _footerEditor.GetHtml() : _footer;
+                template.Footer = _footer;
                 template.PageTitle = _pageTitle;
                 template.PageDescription = _pageDescription;
                 template.PageKeywords = _pageKeywords;

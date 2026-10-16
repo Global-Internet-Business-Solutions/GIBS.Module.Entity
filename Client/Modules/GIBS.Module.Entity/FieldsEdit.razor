@@ -426,8 +426,8 @@
             return false;
         }
 
-        var existingField = await EntityFieldService.GetFieldByKeyAsync(_entityTypeId, key, ModuleState.ModuleId);
-        return existingField != null && existingField.FieldId != _fieldId;
+        var fields = await EntityFieldService.GetFieldsAsync(_entityTypeId, ModuleState.ModuleId);
+        return fields.Any(field => field.FieldId != _fieldId && string.Equals(field.Key, key, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string GetDefaultDataTypeForEditorType(string editorType)

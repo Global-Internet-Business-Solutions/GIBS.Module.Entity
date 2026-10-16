@@ -28,7 +28,7 @@
 
         <!-- Entity Type Selection -->
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="entitytypeid" HelpText="Select the entity type" ResourceKey="EntityType">Entity Type: </Label>
+            <Label Class="col-sm-3 fw-bold" For="entitytypeid" HelpText="Select the entity type" ResourceKey="EntityType">Type: </Label>
             <div class="col-sm-9">
                 <select id="entitytypeid" class="form-select" @bind="@_entityTypeId" @bind:after="OnEntityTypeChanged" required>
                     <option value="0">-- @Localizer["SelectOne"] --</option>
@@ -39,7 +39,7 @@
 
         <!-- Name -->
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="name" HelpText="Enter a name" ResourceKey="Name">Name: </Label>
+            <Label Class="col-sm-3 fw-bold" For="name" HelpText="Enter a name" ResourceKey="Name">Name: </Label>
             <div class="col-sm-9">
                 <input id="name" class="form-control" @bind="@_name" @bind:after="OnNameChanged" maxlength="256" required />
             </div>
@@ -47,7 +47,7 @@
 
         <!-- Key -->
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="key" HelpText="Unique stable key for this entity" ResourceKey="Key">Key: </Label>
+            <Label Class="col-sm-3 fw-bold" For="key" HelpText="Unique stable key for this entity" ResourceKey="Key">Key: </Label>
             <div class="col-sm-9">
                 <input id="key" class="form-control" @bind="@_key" maxlength="100" />
             </div>
@@ -55,7 +55,7 @@
 
         <!-- Description -->
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="description" HelpText="Description of the entity" ResourceKey="Description">Description: </Label>
+            <Label Class="col-sm-3 fw-bold" For="description" HelpText="Description of the entity" ResourceKey="Description">Description: </Label>
             <div class="col-sm-9">
                 <textarea id="description" class="form-control" @bind="@_description" rows="3" maxlength="500"></textarea>
             </div>
@@ -63,7 +63,7 @@
 
         <!-- Parent Entity -->
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="parententityid" HelpText="Optional parent entity for hierarchy" ResourceKey="ParentEntity">Parent Entity: </Label>
+            <Label Class="col-sm-3 fw-bold" For="parententityid" HelpText="Optional parent entity for hierarchy" ResourceKey="ParentEntity">Parent Entity: </Label>
             <div class="col-sm-9">
                 <select id="parententityid" class="form-select" @bind="@_parentEntityId">
                     <option value="">@Localizer["None"]</option>
@@ -78,7 +78,7 @@
         @if (_enableMap)
         {
             <div class="row mb-1 align-items-center">
-                <Label Class="col-sm-3" For="mapaddress" HelpText="Lookup latitude and longitude by address" ResourceKey="SearchByAddress">Search by address: </Label>
+                <Label Class="col-sm-3 fw-bold" For="mapaddress" HelpText="Lookup latitude and longitude by address" ResourceKey="SearchByAddress">Search by address: </Label>
                 <div class="col-sm-9 d-flex gap-2">
                     <input id="mapaddress" class="form-control" @bind="@_mapSearchAddress" />
                     <button type="button" class="btn btn-outline-secondary" @onclick="LookupCoordinatesAsync" disabled="@(_isAddressLookupInProgress || string.IsNullOrWhiteSpace(_googleMapsApiKey))">Find Address</button>
@@ -86,14 +86,14 @@
             </div>
 
             <div class="row mb-1 align-items-center">
-                <Label Class="col-sm-3" For="latitude" HelpText="Latitude for this record" ResourceKey="Latitude">Latitude: </Label>
+                <Label Class="col-sm-3 fw-bold" For="latitude" HelpText="Latitude for this record" ResourceKey="Latitude">Latitude: </Label>
                 <div class="col-sm-9">
                     <input id="latitude" type="number" class="form-control" @bind="@_latitude" step="0.0000001" />
                 </div>
             </div>
 
             <div class="row mb-1 align-items-center">
-                <Label Class="col-sm-3" For="longitude" HelpText="Longitude for this record" ResourceKey="Longitude">Longitude: </Label>
+                <Label Class="col-sm-3 fw-bold" For="longitude" HelpText="Longitude for this record" ResourceKey="Longitude">Longitude: </Label>
                 <div class="col-sm-9">
                     <input id="longitude" type="number" class="form-control" @bind="@_longitude" step="0.0000001" />
                 </div>
@@ -132,7 +132,7 @@
                 <div class="row mb-1 align-items-start" @key="customField.FieldId">
                     @if (!customField.IsCaptionHidden)
                     {
-                        <Label Class="col-sm-3" For="@($"cf_{customField.FieldId}")" HelpText="@customField.HelpText" ResourceKey="@customField.Key">@(string.IsNullOrWhiteSpace(customField.Label) ? customField.Name : customField.Label): </Label>
+                        <Label Class="col-sm-3 fw-bold" For="@($"cf_{customField.FieldId}")" HelpText="@customField.HelpText" ResourceKey="@customField.Key">@(string.IsNullOrWhiteSpace(customField.Label) ? customField.Name : customField.Label): </Label>
                     }
                     <div class="@(customField.IsCaptionHidden ? "col-sm-12" : "col-sm-9")">
                         @if (customField.EditorType == EntityEditorType.HtmlContentDisplay)
@@ -202,7 +202,7 @@
                         {
                             <div>
                                 <div class="form-group mb-2">
-                                    <label>@customField.Label</label>
+                                    <label class="fw-bold">@customField.Label</label>
 
                                     @if (_currentImageFieldId == 0 || _currentImageFieldId == customField.FieldId)
                                     {
@@ -232,7 +232,7 @@
                         {
                             <div>
                                 <div class="form-group mb-2">
-                                    <label>@customField.Label</label>
+                                    <label class="fw-bold">@customField.Label</label>
 
                                     <!-- File Manager Component -->
                                     @if (_currentImageFieldId == 0 || _currentImageFieldId == customField.FieldId)
@@ -316,7 +316,7 @@
 
         <!-- Status -->
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="status" HelpText="Current status of the entity" ResourceKey="Status">Status: </Label>
+            <Label Class="col-sm-3 fw-bold" For="status" HelpText="Current status of the entity" ResourceKey="Status">Status: </Label>
             <div class="col-sm-9">
                 <select id="status" class="form-select" @bind="@_status">
                     @foreach (var status in StatusOptions)
@@ -329,7 +329,7 @@
 
         <!-- Sort Order -->
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="sortorder" HelpText="Display order" ResourceKey="SortOrder">Sort Order: </Label>
+            <Label Class="col-sm-3 fw-bold" For="sortorder" HelpText="Display order" ResourceKey="SortOrder">Sort Order: </Label>
             <div class="col-sm-9">
                 <input id="sortorder" type="number" class="form-control" @bind="@_sortOrder" />
             </div>
@@ -337,7 +337,7 @@
 
         <!-- Is Enabled -->
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="isenabled" HelpText="Is this entity enabled?" ResourceKey="Enabled">Enabled? </Label>
+            <Label Class="col-sm-3 fw-bold" For="isenabled" HelpText="Is this entity enabled?" ResourceKey="Enabled">Enabled? </Label>
             <div class="col-sm-9">
                 <select id="isenabled" class="form-select" @bind="@_isEnabled">
                     <option value="True">@Localizer["Yes"]</option>
@@ -348,7 +348,7 @@
 
         <!-- Is Featured -->
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="isfeatured" HelpText="Is this entity featured?" ResourceKey="Featured">Featured? </Label>
+            <Label Class="col-sm-3 fw-bold" For="isfeatured" HelpText="Is this entity featured?" ResourceKey="Featured">Featured? </Label>
             <div class="col-sm-9">
                 <select id="isfeatured" class="form-select" @bind="@_isFeatured">
                     <option value="True">@Localizer["Yes"]</option>
@@ -359,7 +359,7 @@
 
         <!-- Is Published -->
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="ispublished" HelpText="Is this entity published?" ResourceKey="Published">Published? </Label>
+            <Label Class="col-sm-3 fw-bold" For="ispublished" HelpText="Is this entity published?" ResourceKey="Published">Published? </Label>
             <div class="col-sm-9">
                 <select id="ispublished" class="form-select" @bind="@_isPublished">
                     <option value="True">@Localizer["Yes"]</option>
@@ -370,7 +370,7 @@
 
         <!-- Publish Start Date -->
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="publishstartdate" HelpText="When to start publishing" ResourceKey="PublishStartDate">Publish Start Date: </Label>
+            <Label Class="col-sm-3 fw-bold" For="publishstartdate" HelpText="When to start publishing" ResourceKey="PublishStartDate">Publish Start Date: </Label>
             <div class="col-sm-9">
                 <input id="publishstartdate" type="datetime-local" class="form-control" @bind="@_publishStartDate" />
             </div>
@@ -378,7 +378,7 @@
 
         <!-- Publish End Date -->
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="publishenddate" HelpText="When to stop publishing" ResourceKey="PublishEndDate">Publish End Date: </Label>
+            <Label Class="col-sm-3 fw-bold" For="publishenddate" HelpText="When to stop publishing" ResourceKey="PublishEndDate">Publish End Date: </Label>
             <div class="col-sm-9">
                 <input id="publishenddate" type="datetime-local" class="form-control" @bind="@_publishEndDate" />
             </div>
@@ -386,25 +386,25 @@
 
                 <hr />
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="viewCount" HelpText="View Count for the record" ResourceKey="ViewCount">View Count: </Label>
+            <Label Class="col-sm-3 fw-bold" For="viewCount" HelpText="View Count for the record" ResourceKey="ViewCount">View Count: </Label>
             <div class="col-sm-9">
                 <input id="viewCount" type="number" class="form-control" @bind="@_viewCount" step="0.000001" />
             </div>
         </div>
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="ratingCount" HelpText="Rating Count for the record" ResourceKey="RatingCount">Rating Count: </Label>
+            <Label Class="col-sm-3 fw-bold" For="ratingCount" HelpText="Rating Count for the record" ResourceKey="RatingCount">Rating Count: </Label>
             <div class="col-sm-9">
                 <input id="ratingCount" type="number" class="form-control" @bind="@_ratingCount" step="0.000001" />
             </div>
         </div>
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="rating" HelpText="Rating for the record" ResourceKey="Rating">Rating: </Label>
+            <Label Class="col-sm-3 fw-bold" For="rating" HelpText="Rating for the record" ResourceKey="Rating">Rating: </Label>
             <div class="col-sm-9">
                 <input id="rating" type="number" class="form-control" @bind="@_rating" step="0.000001" />
             </div>
         </div>
         <div class="row mb-1 align-items-center">
-            <Label Class="col-sm-3" For="commentCount" HelpText="Comment Count for the record" ResourceKey="CommentCount">Comment Count: </Label>
+            <Label Class="col-sm-3 fw-bold" For="commentCount" HelpText="Comment Count for the record" ResourceKey="CommentCount">Comment Count: </Label>
             <div class="col-sm-9">
                 <input id="commentCount" type="number" class="form-control" @bind="@_commentCount" step="0.000001" />
             </div>
@@ -413,7 +413,7 @@
 
         <!-- Settings (JSON) -->
         <div class="row mb-1 align-items-start">
-            <Label Class="col-sm-3" For="settings" HelpText="Additional settings in JSON format" ResourceKey="Settings">Settings: </Label>
+            <Label Class="col-sm-3 fw-bold" For="settings" HelpText="Additional settings in JSON format" ResourceKey="Settings">Settings: </Label>
             <div class="col-sm-9">
                 <textarea id="settings" class="form-control" @bind="@_settings" rows="4"></textarea>
             </div>

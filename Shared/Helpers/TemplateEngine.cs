@@ -39,10 +39,12 @@ namespace GIBS.Module.Entity.Helpers
     ///   [RatingCount]       - Entity.RatingCount
     ///   [CommentCount]      - Entity.CommentCount
     ///   [Field:FieldKey]    - custom field value from Entity.Settings (legacy) or EntityValue table (comma-separated for multi-value)
+    ///   [CustomField:FieldKey] - alias for [Field:FieldKey]
     ///   [Field:FieldKey:Index] - indexed custom field value for multi-value fields (for example image list)
     ///   [Field:FieldKey:format] - custom field value with DateTime format (e.g., [Field:BirthDate:yyyy-MM-dd], [Field:EventTime:MMMM dd, yyyy HH:mm])
     ///   [FieldList:FieldKey] - unordered list (<ul><li>...</li></ul>) for multi-value fields
-    ///   [FieldGroup:FieldGroupKey] - two-column table (Label | Value) for fields in the specified group
+    ///   [FieldGroup:FieldGroupKey] - two-column Bootstrap 5 table (Label | Value) for fields in the specified group
+    ///   [FieldGroup:FieldGroupKey:Download] - two-column Bootstrap 5table (Label | Value) with file hyperlinks shown as "Download File (EXT)" and forced download
     ///   [HtmlContent:FieldKey] - raw HTML from the record value, or field-level HtmlContent when no record value exists
     ///   [ViewLink]...[/ViewLink] - hyperlink to current page with ?detail=Entity.Key and class="viewLink"
     ///   [Edit]              - edit hyperlink with pencil icon for current entity (requires SecurityAccessLevel.Edit or higher)
@@ -137,6 +139,7 @@ namespace GIBS.Module.Entity.Helpers
             foreach (var field in fieldsByKey.Values)
             {
                 var fieldToken = $"[Field:{field.Key}]";
+                var customFieldToken = $"[CustomField:{field.Key}]";
                 var fieldListToken = $"[FieldList:{field.Key}]";
                 var htmlToken = $"[HtmlContent:{field.Key}]";
 
@@ -145,6 +148,11 @@ namespace GIBS.Module.Entity.Helpers
                 if (template.Contains(fieldToken))
                 {
                     result.Replace(fieldToken, fieldValue ?? string.Empty);
+                }
+
+                if (template.Contains(customFieldToken))
+                {
+                    result.Replace(customFieldToken, fieldValue ?? string.Empty);
                 }
 
                 var indexedValues = GetIndexedValues(fieldValue);
@@ -233,6 +241,7 @@ namespace GIBS.Module.Entity.Helpers
             foreach (var field in fieldsByKey.Values)
             {
                 var fieldToken = $"[Field:{field.Key}]";
+                var customFieldToken = $"[CustomField:{field.Key}]";
                 var fieldListToken = $"[FieldList:{field.Key}]";
                 var htmlToken = $"[HtmlContent:{field.Key}]";
 
@@ -241,6 +250,11 @@ namespace GIBS.Module.Entity.Helpers
                 if (template.Contains(fieldToken))
                 {
                     result.Replace(fieldToken, fieldValue ?? string.Empty);
+                }
+
+                if (template.Contains(customFieldToken))
+                {
+                    result.Replace(customFieldToken, fieldValue ?? string.Empty);
                 }
 
                 var indexedValues = customValueLists.TryGetValue(field.FieldId, out var values)
@@ -315,7 +329,21 @@ namespace GIBS.Module.Entity.Helpers
 
             content = Regex.Replace(content, pattern, match =>
             {
-                var groupKey = match.Groups[1].Value?.Trim();
+                var tokenValue = match.Groups[1].Value?.Trim();
+                if (string.IsNullOrWhiteSpace(tokenValue))
+                {
+                    return string.Empty;
+                }
+
+                var renderDownloadLinks = false;
+                var groupKey = tokenValue;
+                const string downloadSuffix = ":Download";
+                if (groupKey.EndsWith(downloadSuffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    groupKey = groupKey[..^downloadSuffix.Length].Trim();
+                    renderDownloadLinks = true;
+                }
+
                 if (string.IsNullOrWhiteSpace(groupKey) || !groupLookup.TryGetValue(groupKey, out var fieldGroup))
                 {
                     return string.Empty;
@@ -338,9 +366,20 @@ namespace GIBS.Module.Entity.Helpers
                     var values = (getFieldValues?.Invoke(field.FieldId) ?? new List<string>())
                         .Where(v => !string.IsNullOrWhiteSpace(v))
                         .ToList();
-                    var value = string.Join(", ", values);
-                    return $"<tr><td class=\"text-end\"><span class=\"fw-bold\">{WebUtility.HtmlEncode(label)}:</span></td><td>{WebUtility.HtmlEncode(value)}</td></tr>";
-                }).ToList();
+
+                    var renderedValue = renderDownloadLinks
+                        ? BuildFieldGroupDownloadLinks(values)
+                        : WebUtility.HtmlEncode(string.Join(", ", values));
+
+                    if (string.IsNullOrWhiteSpace(renderedValue))
+                    {
+                        return string.Empty;
+                    }
+
+                    return $"<tr><td class=\"text-end\"><span class=\"fw-bold\">{WebUtility.HtmlEncode(label)}:</span></td><td>{renderedValue}</td></tr>";
+                })
+                .Where(row => !string.IsNullOrWhiteSpace(row))
+                .ToList();
 
                 if (!rows.Any())
                 {
@@ -352,6 +391,29 @@ namespace GIBS.Module.Entity.Helpers
 
             result.Clear();
             result.Append(content);
+        }
+
+        private static string BuildFieldGroupDownloadLinks(IReadOnlyList<string> values)
+        {
+            if (values == null || values.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            var links = values
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Select(v => v.Trim())
+                .Select(v =>
+                {
+                    var extension = System.IO.Path.GetExtension(v);
+                    var fileType = string.IsNullOrWhiteSpace(extension) ? "FILE" : extension.TrimStart('.').ToUpperInvariant();
+                    var safeHref = WebUtility.HtmlEncode(v);
+                    var safeLabel = WebUtility.HtmlEncode($"Download File ({fileType})");
+                    return $"<a href=\"{safeHref}\" download>{safeLabel}</a>";
+                })
+                .ToList();
+
+            return string.Join("<br />", links);
         }
 
         private static void ApplyViewLinkToken(StringBuilder result, Models.Entity entity, string? viewLinkBaseUrl)
