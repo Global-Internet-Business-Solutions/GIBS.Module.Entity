@@ -198,6 +198,7 @@
     private bool _showDetail;
     private bool _showListing;
     private string _selectedEntityTypeName;
+    private string _selectedEntityTypeDescription;
     private string _selectedEntityTypeKey;
     private Entity _recordDetails;
     private EntityTemplate _detailTemplate;
@@ -292,6 +293,7 @@
                     if (selectedEntityType != null)
                     {
                         _selectedEntityTypeName = selectedEntityType.Name;
+                        _selectedEntityTypeDescription = selectedEntityType.Description;
                         _selectedEntityTypeKey = selectedEntityType.Key;
 
                         var requestedSortBy = GetQueryValue("sortby");
@@ -612,7 +614,11 @@
         }
 
         var typeName = _selectedEntityTypeName ?? string.Empty;
+        var typeDescription = _selectedEntityTypeDescription ?? string.Empty;
+
         return templateContent
+            .Replace("[TypeDescription]", typeDescription, StringComparison.Ordinal)
+            .Replace("[TypeDescription}", typeDescription, StringComparison.Ordinal)
             .Replace("[Type]", typeName, StringComparison.Ordinal)
             .Replace("[Type}", typeName, StringComparison.Ordinal);
     }

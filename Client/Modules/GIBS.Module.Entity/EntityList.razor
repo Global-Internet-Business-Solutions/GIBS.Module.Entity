@@ -32,7 +32,8 @@ else
 {
     @if (@_Entitys.Count != 0)
     {
-        <Pager Items="@_Entitys">
+
+        <Pager Items="@_Entitys" PageSize="20" SearchProperties="Name,Type">
             <Header>
                 <th style="width: 1px;">&nbsp;</th>
                 <th style="width: 1px;">&nbsp;</th>
@@ -44,6 +45,7 @@ else
                 }
                 <th>@Localizer["Status"]</th>
                 <th>@Localizer["IsEnabled"]</th>
+                <th>@Localizer["LastUpdated"]</th>
                 <th>@Localizer["SortOrder"]</th>
             </Header>
             <Row>
@@ -58,6 +60,7 @@ else
                 }
                  <td>@context.Status</td>
                 <td>@context.IsEnabled</td>
+                <td>@context.ModifiedOn.ToLocalTime().ToString("g")</td>
                 <td>@context.SortOrder</td>
             </Row>
         </Pager>
@@ -284,6 +287,11 @@ else
     private string GetFieldDisplayName(EntityField field)
     {
         return string.IsNullOrWhiteSpace(field.Label) ? field.Name : field.Label;
+    }
+
+    private string GetFieldKey(EntityField field)
+    {
+        return string.IsNullOrWhiteSpace(field.Key) ? field.Name : field.Key;
     }
 
     private string GetManagerFieldValue(Entity entity, int fieldId)

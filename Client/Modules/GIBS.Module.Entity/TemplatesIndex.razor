@@ -13,9 +13,12 @@
 }
 else
 {
-    <div class="text-end mb-3">   
-    <NavLink class="btn btn-secondary" href="@NavigateUrl(@ModuleState.ModuleId, "BackOffice")">@Localizer["Back"]</NavLink>
-    <ActionLink Action="TemplatesEdit" Security="SecurityAccessLevel.Edit" Text="Add Template" ResourceKey="Add" Class="btn btn-success" />
+    <div class="d-flex justify-content-between">
+        <h3>@Localizer["Manage Templates"]</h3>
+        <div>       
+            <ActionLink Action="TemplatesEdit" Security="SecurityAccessLevel.Edit" Text="Add Template" ResourceKey="Add" Class="btn btn-success" />
+            <NavLink class="btn btn-secondary" href="@NavigateUrl(@ModuleState.ModuleId, "BackOffice")">@Localizer["BackOffice"]</NavLink>
+        </div>
     </div>
    
 

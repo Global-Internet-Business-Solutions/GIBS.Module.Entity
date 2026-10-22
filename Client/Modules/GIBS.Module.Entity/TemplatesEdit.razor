@@ -42,7 +42,7 @@
         <div class="small mb-2">
             @foreach (var token in _availableTokens)
             {
-                <code class="me-1">@token</code>
+                <code class="me-1" role="button" title="Click to copy" style="cursor:pointer;" @onclick="() => CopyToken(token)">@token</code>
             }
         </div>
         <div class="row mb-3 align-items-start">
@@ -58,7 +58,7 @@
                     <div class="small mb-2">
                         @foreach (var fieldToken in _availableFieldTokens)
                         {
-                            <code class="me-1">@fieldToken</code>
+                            <code class="me-1" role="button" title="Click to copy" style="cursor:pointer;" @onclick="() => CopyToken(fieldToken)">@fieldToken</code>
                         }
                     </div>
                 }
@@ -70,19 +70,25 @@
                 <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CopyFieldTokens">Copy [Field:FieldKey] Tokens</button>
             </div>
         </div>
-
+        <hr />
         <div class="row mb-3 align-items-start">
             <div class="col-sm-3"></div>
-            <div class="col-sm-9">
-        <button type="button" class="btn btn-outline-primary btn-sm" @onclick="CombineAndCopyCurrentValues">Combine and Copy Current Values</button>
+            <div class="col-sm-9 text-end">
+                <button type="button" class="btn btn-outline-success btn-sm" @onclick="CombineAndCopyCurrentValues">Combine and Copy Current Values</button>
             </div>
         </div>
 
 
         <div class="row mb-1 align-items-start">
-            <Label Class="col-sm-3" For="header" HelpText="Template content rendered before items" ResourceKey="Header">Header:</Label>
+            
+                <Label Class="col-sm-3" For="header" HelpText="Template content rendered before items" ResourceKey="Header">Header:</Label>
             <div class="col-sm-9">
                 <textarea id="header" class="form-control" @bind="@_header" rows="6"></textarea>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <div class="col-sm-12 text-center">
+                <button type="button" class="btn btn-outline-secondary btn-sm ms-2" @onclick="SaveAndStay">Save & Stay</button>
             </div>
         </div>
         <div class="row mb-1 align-items-start">
@@ -107,10 +113,20 @@
             </div>
         </div>
         }
+        <div class="row mb-1 align-items-center">
+            <div class="col-sm-12 text-center">
+                <button type="button" class="btn btn-outline-secondary btn-sm ms-2" @onclick="SaveAndStay">Save & Stay</button>
+            </div>
+        </div>
         <div class="row mb-1 align-items-start">
             <Label Class="col-sm-3" For="footer" HelpText="Template content rendered after items" ResourceKey="Footer">Footer:</Label>
             <div class="col-sm-9">
                 <textarea id="footer" class="form-control" @bind="@_footer" rows="6"></textarea>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <div class="col-sm-12 text-center">
+                <button type="button" class="btn btn-outline-secondary btn-sm ms-2" @onclick="SaveAndStay">Save & Stay</button>
             </div>
         </div>
         <hr />
@@ -256,6 +272,7 @@
             "[HASNOTFEATURED]...[/HASNOTFEATURED]",
             "[HASIMAGES]...[/HASIMAGES]",
             "[HASNOIMAGES]...[/HASNOIMAGES]",
+            "[HASVALUE:FieldKey]...[/HASVALUE:FieldKey]",
             "[Field:FieldKey]",
             "[CustomField:FieldKey]",
             "[Field:FieldKey:0]",
@@ -281,6 +298,7 @@
                 tokens.Add($"[Field:{field.Key}:yyyy-MM-dd]");
                 tokens.Add($"[FieldList:{field.Key}]");
                 tokens.Add($"[HtmlContent:{field.Key}]");
+                tokens.Add($"[HASVALUE:{field.Key}]...[/HASVALUE:{field.Key}]");
             }
 
             var fieldGroups = await EntityFieldGroupService.GetFieldGroupsAsync(entityTypeId, ModuleState.ModuleId) ?? new List<EntityFieldGroup>();
@@ -301,6 +319,25 @@
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(token => token, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private async Task CopyToken(string token)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return;
+            }
+
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", token);
+            AddModuleMessage($"Copied: {token}", MessageType.Success);
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error copying token {Error}", ex.Message);
+            AddModuleMessage("Unable to copy token.", MessageType.Error);
+        }
     }
 
     private async Task CopyTemplateTokenGuide()
@@ -412,44 +449,9 @@
         {
             try
             {
-                EntityTemplate template;
-                if (_templateId != -1)
-                {
-                    template = await EntityTemplateService.GetTemplateAsync(_templateId, ModuleState.ModuleId);
-                }
-                else
-                {
-                    template = new EntityTemplate
-                    {
-                        ModuleId = ModuleState.ModuleId
-                    };
-                }
-
-                template.TemplateType = _templateType;
-                template.EntityTypeId = int.TryParse(_entityTypeId, out var entityTypeId) ? entityTypeId : null;
-                template.Header = _header;
-                template.Item = _item;
-                template.Alternate = _alternate;
-                template.Separator = _separator;
-                template.Footer = _footer;
-                template.PageTitle = _pageTitle;
-                template.PageDescription = _pageDescription;
-                template.PageKeywords = _pageKeywords;
-                template.PageHeader = _pageHeader;
-
-                if (_templateId != -1)
-                {
-                    await EntityTemplateService.UpdateTemplateAsync(template);
-                    await logger.LogInformation("Template Updated {Template}", template);
-                }
-                else
-                {
-                    template = await EntityTemplateService.AddTemplateAsync(template);
-                    await logger.LogInformation("Template Added {Template}", template);
-                }
-
+                await SaveTemplateInternal();
+                validated = false;
                 Index.ClearFeaturedCache(ModuleState.ModuleId);
-
                 NavigationManager.NavigateTo(NavigateUrl(ModuleState.ModuleId, "TemplatesIndex"));
             }
             catch (Exception ex)
@@ -461,6 +463,75 @@
         else
         {
             AddModuleMessage(Localizer["Message.SaveValidation"], MessageType.Warning);
+        }
+    }
+
+    private async Task SaveAndStay()
+    {
+        validated = true;
+        var interop = new Oqtane.UI.Interop(JSRuntime);
+        if (await interop.FormValid(form))
+        {
+            try
+            {
+                await SaveTemplateInternal();
+                validated = false;
+                Index.ClearFeaturedCache(ModuleState.ModuleId);
+                AddModuleMessage("Template saved.", MessageType.Success);
+            }
+            catch (Exception ex)
+            {
+                await logger.LogError(ex, "Error Saving Template {Error}", ex.Message);
+                AddModuleMessage(Localizer["Message.SaveError"], MessageType.Error);
+            }
+        }
+        else
+        {
+            AddModuleMessage(Localizer["Message.SaveValidation"], MessageType.Warning);
+        }
+    }
+
+    private async Task SaveTemplateInternal()
+    {
+        EntityTemplate template;
+        if (_templateId != -1)
+        {
+            template = await EntityTemplateService.GetTemplateAsync(_templateId, ModuleState.ModuleId);
+        }
+        else
+        {
+            template = new EntityTemplate
+            {
+                ModuleId = ModuleState.ModuleId
+            };
+        }
+
+        template.TemplateType = _templateType;
+        template.EntityTypeId = int.TryParse(_entityTypeId, out var entityTypeId) ? entityTypeId : null;
+        template.Header = _header;
+        template.Item = _item;
+        template.Alternate = _alternate;
+        template.Separator = _separator;
+        template.Footer = _footer;
+        template.PageTitle = _pageTitle;
+        template.PageDescription = _pageDescription;
+        template.PageKeywords = _pageKeywords;
+        template.PageHeader = _pageHeader;
+
+        if (_templateId != -1)
+        {
+            await EntityTemplateService.UpdateTemplateAsync(template);
+            await logger.LogInformation("Template Updated {Template}", template);
+        }
+        else
+        {
+            template = await EntityTemplateService.AddTemplateAsync(template);
+            _templateId = template.TemplateId;
+            _createdBy = template.CreatedBy;
+            _createdOn = template.CreatedOn;
+            _modifiedBy = template.ModifiedBy;
+            _modifiedOn = template.ModifiedOn;
+            await logger.LogInformation("Template Added {Template}", template);
         }
     }
 }

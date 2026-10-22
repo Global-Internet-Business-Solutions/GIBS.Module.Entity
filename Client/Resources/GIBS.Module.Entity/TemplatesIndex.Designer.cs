@@ -61,6 +61,15 @@ namespace GIBS.Module.Entity.Client.Resources.GIBS_Module_Entity {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Back Office.
+        /// </summary>
+        internal static string BackOffice {
+            get {
+                return ResourceManager.GetString("BackOffice", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Edit.
         /// </summary>
         internal static string TemplatesEdit {

@@ -52,6 +52,8 @@ namespace GIBS.Module.Entity.Helpers
     ///   [HASNOTFEATURED]...[/HASNOTFEATURED] - shows block only when Entity.IsFeatured is false
     ///   [HASIMAGES]...[/HASIMAGES] - shows block only when the record has ImageUpload values
     ///   [HASNOIMAGES]...[/HASNOIMAGES] - shows block only when the record has no ImageUpload values
+    ///   [HASVALUE:FieldKey]...[/HASVALUE:FieldKey] - shows block only when the record has a non-empty value for the specified field
+    ///   [HASNOVALUE:FieldKey]...[/HASNOVALUE:FieldKey] - shows block only when the record has an empty value for the specified field
     ///   
     /// Date formats . . . .
     /// ////<!-- Date only -->
@@ -134,6 +136,11 @@ namespace GIBS.Module.Entity.Helpers
                 GetIndexedValues(value).Any(v => !string.IsNullOrWhiteSpace(v)));
             ApplyFeaturedConditionalBlocks(result, entity.IsFeatured);
             ApplyImageConditionalBlocks(result, hasImages);
+            ApplyHasValueConditionalBlocks(result, fieldsByKey, fieldId =>
+            {
+                customValues.TryGetValue(fieldId, out var fieldValue);
+                return GetIndexedValues(fieldValue);
+            });
 
             // Custom field tokens
             foreach (var field in fieldsByKey.Values)
@@ -236,6 +243,10 @@ namespace GIBS.Module.Entity.Helpers
                 values.Any(v => !string.IsNullOrWhiteSpace(v)));
             ApplyFeaturedConditionalBlocks(result, entity.IsFeatured);
             ApplyImageConditionalBlocks(result, hasImages);
+            ApplyHasValueConditionalBlocks(result, fieldsByKey, fieldId =>
+                customValueLists.TryGetValue(fieldId, out var fieldValues)
+                    ? fieldValues.SelectMany(v => GetIndexedValues(v)).Where(v => !string.IsNullOrWhiteSpace(v)).ToList()
+                    : new List<string>());
 
             // Custom field tokens
             foreach (var field in fieldsByKey.Values)
@@ -845,6 +856,62 @@ namespace GIBS.Module.Entity.Helpers
             // Always remove any stray markers so tokens never render literally
             content = Regex.Replace(content, @"\[/?HASIMAGES\]", string.Empty, RegexOptions.IgnoreCase);
             content = Regex.Replace(content, @"\[/?HASNOIMAGES\]", string.Empty, RegexOptions.IgnoreCase);
+
+            result.Clear();
+            result.Append(content);
+        }
+
+        private static void ApplyHasValueConditionalBlocks(StringBuilder result, IReadOnlyDictionary<string, EntityField> fieldsByKey, Func<int, IReadOnlyList<string>> getFieldValues)
+        {
+            if (result.Length == 0)
+            {
+                return;
+            }
+
+            var content = result.ToString();
+            const string leftBracketPattern = @"(?:\[|&#91;?|&#x5B;?|&lsqb;|&lbrack;|［)";
+            const string rightBracketPattern = @"(?:\]|&#93;?|&#x5D;?|&rsqb;|&rbrack;|］)";
+            var hasValuePattern = $@"{leftBracketPattern}\s*HASVALUE\s*:\s*(.+?)\s*{rightBracketPattern}(.*?){leftBracketPattern}\s*/HASVALUE\s*:\s*\1\s*{rightBracketPattern}";
+            var hasNoValuePattern = $@"{leftBracketPattern}\s*HASNOVALUE\s*:\s*(.+?)\s*{rightBracketPattern}(.*?){leftBracketPattern}\s*/HASNOVALUE\s*:\s*\1\s*{rightBracketPattern}";
+
+            if (fieldsByKey != null && fieldsByKey.Count > 0 && getFieldValues != null)
+            {
+                content = Regex.Replace(content, hasValuePattern, match =>
+                {
+                    var fieldKey = match.Groups[1].Value?.Trim();
+                    if (string.IsNullOrWhiteSpace(fieldKey) || !fieldsByKey.TryGetValue(fieldKey, out var field))
+                    {
+                        return string.Empty;
+                    }
+
+                    var values = (getFieldValues(field.FieldId) ?? new List<string>())
+                        .Where(v => !string.IsNullOrWhiteSpace(v))
+                        .ToList();
+
+                    return values.Any() ? match.Groups[2].Value : string.Empty;
+                }, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+                content = Regex.Replace(content, hasNoValuePattern, match =>
+                {
+                    var fieldKey = match.Groups[1].Value?.Trim();
+                    if (string.IsNullOrWhiteSpace(fieldKey) || !fieldsByKey.TryGetValue(fieldKey, out var field))
+                    {
+                        return string.Empty;
+                    }
+
+                    var values = (getFieldValues(field.FieldId) ?? new List<string>())
+                        .Where(v => !string.IsNullOrWhiteSpace(v))
+                        .ToList();
+
+                    return values.Any() ? string.Empty : match.Groups[2].Value;
+                }, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            }
+
+            // Always remove any stray markers so tokens never render literally.
+            content = Regex.Replace(content, $@"{leftBracketPattern}\s*HASVALUE\s*:\s*.+?\s*{rightBracketPattern}", string.Empty, RegexOptions.IgnoreCase);
+            content = Regex.Replace(content, $@"{leftBracketPattern}\s*/HASVALUE\s*:\s*.+?\s*{rightBracketPattern}", string.Empty, RegexOptions.IgnoreCase);
+            content = Regex.Replace(content, $@"{leftBracketPattern}\s*HASNOVALUE\s*:\s*.+?\s*{rightBracketPattern}", string.Empty, RegexOptions.IgnoreCase);
+            content = Regex.Replace(content, $@"{leftBracketPattern}\s*/HASNOVALUE\s*:\s*.+?\s*{rightBracketPattern}", string.Empty, RegexOptions.IgnoreCase);
 
             result.Clear();
             result.Append(content);
